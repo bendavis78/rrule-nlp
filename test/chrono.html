@@ -1,0 +1,26 @@
+<script src="../bower_components/chrono/chrono.min.js"></script>
+<script src="expressions.js"></script>
+<script src="../chrono-recurrence.js"></script>
+
+<script>
+  /**
+   * By-weekday extension
+   */
+</script>
+
+<script>
+/* globals expressions, chrono */
+var parsed;
+expressions.forEach(function(exp) {
+  parsed = chrono.parse(exp[0]);
+  if (parsed.length === 0) {
+    console.error(exp[0]);
+  } else {
+    console.groupCollapsed(exp[0] + '(' + parsed.length + ')');
+    parsed.forEach(function(result) {
+      console.log(result);
+    });
+    console.groupEnd();
+  }
+});
+</script>

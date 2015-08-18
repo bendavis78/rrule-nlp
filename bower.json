@@ -6,5 +6,11 @@
   ],
   "description": "Provides natural language parsing of recurring events",
   "main": "lib/rrule-nlp.js",
-  "homepage": "https://github.com/bendavis78/rrule-nlp"
+  "homepage": "https://github.com/bendavis78/rrule-nlp",
+  "dependencies": {
+    "chrono": "wanasit/chrono#^1.0.2"
+  },
+  "ignore": [
+    "test"
+  ]
 }

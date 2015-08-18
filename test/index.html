@@ -1,0 +1,84 @@
+<script src="../bower_components/chrono/chrono.min.js"></script>
+<script src="../rrule-nlp.js"></script>
+<script src="phrases.js"></script>
+
+<script>
+  /* globals rrule: false, chrono: false */
+  var phrase, expected, result, parser, i, k;
+
+  function logResult(errors, result) {
+    if (errors.length) {
+      console.groupCollapsed('%cFailed: ' + phrase, 'color: red');
+      for (var e=0; e<errors.length; e++) {
+        if (errors[e].key) {
+          console.group(errors[e].key);
+          console.log('Expected: ', errors[e].expected);
+          console.log('Result: ', errors[e].result);
+          console.groupEnd();
+        } else if (errors[e] instanceof Error) {
+          console.error(errors[e].stack);
+        } else {
+          console.error.apply(console, errors[e]);
+        }
+      }
+      console.groupEnd();
+    } else {
+      console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
+      console.log('Result: ', result);
+      console.groupEnd();
+    }
+  }
+
+  function cmp(expected, result) {
+    if (expected instanceof Array) {
+      expected = ','.join(expected);
+      result = ','.join(result);
+    } else if (expected instanceof Date) {
+      expected = expected.getTime();
+      if (result instanceof chrono.ParsedComponents) {
+        console.log('converting: ', result);
+        result = rrule.getParsedDate(result);
+      }
+      result = result && result.getTime ? result.getTime() : result;
+    }
+    return expected == result;
+  }
+
+  var errors, chkResult;
+
+  for (i=0; i<window.phrases.length; i++) {
+    phrase = window.phrases[i][0];
+    expected = window.phrases[i][1];
+    errors = [];
+
+    try {
+      result = rrule.parse(phrase, new Date(2015, 0, 1, 12, 0));
+    } catch (e) {
+      if (expected !== null) {
+        errors.push(e);
+      }
+      logResult(errors);
+      continue;
+    }
+    if (typeof(expected) === 'object') {
+      if (!result.rrule) {
+        errors.push(['expected rrule in result: ', result]);
+        logResult(errors);
+        continue;
+      }
+      for (k in expected) {
+        chkResult = result.rrule;
+        if (/dt(start|end)/.test(k)) {
+          chkResult = result;
+        }
+        if (!cmp(expected[k], chkResult[k])) {
+          errors.push({key: k, expected: expected[k], result: chkResult[k]});
+        }
+      }
+    } else {
+      errors.push(['TODO: handle ', expected, parser]);
+    }
+
+    logResult(errors, result);
+  }
+</script>

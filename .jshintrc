@@ -1,0 +1,10 @@
+{
+  "node": true,
+  "browser": true,
+  "esnext": true,
+  "indent": 2,
+  "quotmark": "single",
+  "undef": true,
+  "unused": true
+}
+
