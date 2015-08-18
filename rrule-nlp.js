@@ -59,8 +59,8 @@ var RE_MONTHS = MONTHS.map(function(r) {
 });
 var RE_MONTH = new RegExp('(' + MONTHS.join(')$|(') + ')$');
 
-var units = ['day', 'week', 'month', 'year', 'hour', 'minute', 'seconds'];
-var unitsFreq = ['daily', 'weekly', 'monthly', 'yearly', 'hourly', 'minutely', 'secondly'];
+var units = ['year', 'month', 'week', 'day', 'hour', 'minute', 'seconds'];
+var unitsFreq = ['yearly', 'monthly', 'weekly', 'daily', 'hourly', 'minutely', 'secondly'];
 
 var RE_UNITS = new RegExp('^(' + units.join('s?|') + '?)$');
 
@@ -422,10 +422,10 @@ function parse(phrase, refDate) {
   } else {
     // no recurrence, try just date/time
     var parsed = parseDateTime(unparsed, result.refDate);
-    if (parsed && parsed.start) {
-      result.dtstart = parsed.start;
+    if (parsed.length && parsed[0].start) {
+      result.dtstart = parsed[0].start;
       if (parsed.end) {
-        result.dtend = parsed.end;
+        result.dtend = parsed[0].end;
       }
     }
   }
@@ -457,21 +457,27 @@ function parseStartAndEnd(phrase, result) {
     // * otherwise: from/to acts as the rrule bounds (rrule.until)
     onRecurrenceParsed(function(rrule) {
       var from = parseDateTime(match[2], result.refDate);
-      var to = parseDateTime(match[4], from[0].date());
+      var to = parseDateTime(match[4], result.refDate);
+      from = from.length ? from[0].start : null;
+      to = to.length ? to[0].start : null;
+
       // We assume from/to have same resolution (eg, hour-to-hour, day-to-day)
-      var knownValues = from.start.knownValues;
+      var knownValues = from.knownValues;
       var unit, idx, max = -1;
       for (unit in knownValues) {
         idx = units.indexOf(unit); 
-        if (idx > max) {
+        if (idx < max) {
           max = idx;
         }
       }
-      result.dtstart = from;
+      result.dtstart = getParsedDate(from);
+      if (!to) {
+        return;
+      }
       if (unitsFreq.indexOf(rrule.freq) < max) {
-        result.dtend = to;
+        result.dtend = getParsedDate(to);
       } else {
-        result.rrule.until = to;
+        result.rrule.until = getParsedDate(to);
       }
     });
     return match[1];
@@ -495,10 +501,10 @@ function parseRecurringTime(phrase, result) {
     if (!parsedTime[i].start) {
       continue;
     }
-    if (parsedTime[i].isCertain('hour')) {
+    if (parsedTime[i].start.isCertain('hour')) {
       result.rrule.byhour.push(parsedTime[i].start.get('hour'));
     }
-    if (parsedTime[i].isCertain('minute')) {
+    if (parsedTime[i].start.isCertain('minute')) {
       result.rrule.byminute.push(parsedTime[i].start.get('minute'));
     }
   }

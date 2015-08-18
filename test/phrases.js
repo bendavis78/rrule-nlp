@@ -270,7 +270,7 @@ var phrases = [
     'every 4th of the month starting next tuesday', 
     {
       'freq': 'monthly', 
-      'dtstart': new Date(2015, 0, 5), 
+      'dtstart': new Date(2015, 0, 6), 
       'bymonthday': '4', 
       'interval': 1
     }
@@ -337,19 +337,19 @@ var phrases = [
   ], 
   [
     'march 3rd', 
-    '2015-03-03'
+    {'dtstart': new Date(2015, 2, 3)}
   ], 
   [
     'tomorrow', 
-    '2015-01-02'
+    {'dtstart': new Date(2015, 0, 2)}
   ], 
   [
     'mar 2 2012', 
-    '2012-03-02'
+    {'dtstart': new Date(2012, 2, 2)}
   ], 
   [
     'this sunday', 
-    '2015-01-03'
+    {'dtstart': new Date(2015, 0, 3)}
   ], 
   [
     'thursday, february 18th', 
@@ -357,26 +357,26 @@ var phrases = [
   ], 
   [
     'march 3rd at 12:15am', 
-    '2015-03-03 00:15:00'
+    {'dtstart': new Date(2015, 2, 3, 0, 15, 0)}
   ], 
   [
     'tomorrow at 3:30', 
-    '2015-01-02 15:30:00'
+    {'dtstart': new Date(2015, 0, 2, 15, 30, 0)}
   ], 
   [
     'in 30 minutes', 
-    '2015-01-01 00:30:00'
+    {'dtstart': new Date(2015, 0, 1, 0, 30, 0)}
   ], 
   [
     'at 4', 
-    '2015-01-01 16:00:00'
+    {'dtstart': new Date(2015, 0, 1, 16, 0, 0)}
   ], 
   [
     '2 hours from now', 
-    '2015-01-01 02:00:00'
+    {'dtstart': new Date(2015, 0, 1, 2, 0, 0)}
   ], 
   [
     'sunday at 2', 
-    '2015-01-03 14:00:00'
+    {'dtstart': new Date(2015, 0, 3, 14, 0, 0)}
   ]
 ];

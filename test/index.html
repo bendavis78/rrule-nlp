@@ -35,10 +35,6 @@
       result = ','.join(result);
     } else if (expected instanceof Date) {
       expected = expected.getTime();
-      if (result instanceof chrono.ParsedComponents) {
-        console.log('converting: ', result);
-        result = rrule.getParsedDate(result);
-      }
       result = result && result.getTime ? result.getTime() : result;
     }
     return expected == result;
@@ -60,23 +56,31 @@
       logResult(errors);
       continue;
     }
-    if (typeof(expected) === 'object') {
-      if (!result.rrule) {
-        errors.push(['expected rrule in result: ', result]);
-        logResult(errors);
-        continue;
+    if (expected instanceof Date) {
+      if (!cmp(expected, result)) {
+        if (result instanceof chrono.ParsedResult) {
+          result = rrule.getParsedDate(result);
+        }
+        errors.push([expected, '!=', result]);
       }
+    } else if (typeof(expected) === 'object') {
       for (k in expected) {
+        if (!result.rrule) {
+          result.rrule = {};
+        }
         chkResult = result.rrule;
         if (/dt(start|end)/.test(k)) {
           chkResult = result;
+        }
+        if (chkResult[k] instanceof chrono.ParsedComponents) {
+          chkResult[k] = rrule.getParsedDate(chkResult[k]);
         }
         if (!cmp(expected[k], chkResult[k])) {
           errors.push({key: k, expected: expected[k], result: chkResult[k]});
         }
       }
     } else {
-      errors.push(['TODO: handle ', expected, parser]);
+      errors.push(['TODO: handle ', expected, result]);
     }
 
     logResult(errors, result);
