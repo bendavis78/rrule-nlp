@@ -1,12 +1,21 @@
 <script src="../bower_components/chrono/chrono.min.js"></script>
+<script src="../bower_components/moment/min/moment.min.js"></script>
 <script src="../rrule-nlp.js"></script>
 <script src="phrases.js"></script>
 
 <script>
   /* globals rrule: false, chrono: false */
-  var phrase, expected, result, parser, i, k;
+  var phrase, expected, result, i, k;
 
   function logResult(errors, result) {
+    var rfcString;
+    errors = errors || [];
+    try {
+      rfcString = result.toString();
+    } catch (e) {
+      rfcString = null;
+      errors.push(e);
+    }
     if (errors.length) {
       console.groupCollapsed('%cFailed: ' + phrase, 'color: red');
       for (var e=0; e<errors.length; e++) {
@@ -14,6 +23,7 @@
           console.group(errors[e].key);
           console.log('Expected: ', errors[e].expected);
           console.log('Result: ', errors[e].result);
+          console.log(result);
           console.groupEnd();
         } else if (errors[e] instanceof Error) {
           console.error(errors[e].stack);
@@ -25,6 +35,7 @@
     } else {
       console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
       console.log('Result: ', result);
+      console.log('%c' + rfcString, 'color: blue');
       console.groupEnd();
     }
   }
@@ -40,7 +51,12 @@
     return expected == result;
   }
 
-  var errors, chkResult;
+  var errors, chkResult, chkValue;
+
+  var opts = {
+    refDate: new Date(2015, 0, 1, 12, 0),
+    preferFuture: true
+  };
 
   for (i=0; i<window.phrases.length; i++) {
     phrase = window.phrases[i][0];
@@ -48,7 +64,10 @@
     errors = [];
 
     try {
-      result = rrule.parse(phrase, new Date(2015, 0, 1, 12, 0));
+      result = rrule.parse(phrase, opts);
+      if (!(result instanceof rrule.ParsedResult)) {
+        throw new Error('result is not a ParsedResult object');
+      }
     } catch (e) {
       if (expected !== null) {
         errors.push(e);
@@ -56,14 +75,7 @@
       logResult(errors);
       continue;
     }
-    if (expected instanceof Date) {
-      if (!cmp(expected, result)) {
-        if (result instanceof chrono.ParsedResult) {
-          result = rrule.getParsedDate(result);
-        }
-        errors.push([expected, '!=', result]);
-      }
-    } else if (typeof(expected) === 'object') {
+    if (typeof(expected) === 'object') {
       for (k in expected) {
         if (!result.rrule) {
           result.rrule = {};
@@ -72,11 +84,12 @@
         if (/dt(start|end)/.test(k)) {
           chkResult = result;
         }
-        if (chkResult[k] instanceof chrono.ParsedComponents) {
-          chkResult[k] = rrule.getParsedDate(chkResult[k]);
+        chkValue = chkResult[k];
+        if (chkValue instanceof chrono.ParsedComponents) {
+          chkValue = rrule.formatRFC(k, chkResult[k], opts.refDate);
         }
-        if (!cmp(expected[k], chkResult[k])) {
-          errors.push({key: k, expected: expected[k], result: chkResult[k]});
+        if (!cmp(expected[k], chkValue)) {
+          errors.push({key: k, expected: expected[k], result: chkValue});
         }
       }
     } else {

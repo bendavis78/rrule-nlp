@@ -1,4 +1,4 @@
-/* globals chrono */
+/* globals chrono, moment */
 /* exported rrule */
 var rrule = (function() {
 
@@ -36,9 +36,12 @@ var RE_DOWS = DAYS_OF_WEEK.map(function(r) {
 });
 var RE_DOW = new RegExp('(' + DAYS_OF_WEEK.join(')|(') + ')');
 var RE_PLURAL_DOW = /(mon|tues|wednes|thurs|fri|satur|sun)days/;
-var RE_PLURAL_WEEKDAY = new RegExp('weekdays|weekends|' + RE_PLURAL_DOW.source);
+var RE_PLURAL_WKDAY = new RegExp('weekdays|weekends|' + RE_PLURAL_DOW.source);
 
-var weekdayCodes = ['MO','TU','WE','TH','FR', 'SA', 'SU', 'MO,TU,WE,TH,FR', 'SA,SU'];
+var weekdayCodes = [
+  'MO','TU','WE','TH','FR', 'SA', 'SU',
+  'MO,TU,WE,TH,FR', 'SA,SU'
+];
 
 var MONTHS = [
   'jan(uary)?',
@@ -59,8 +62,14 @@ var RE_MONTHS = MONTHS.map(function(r) {
 });
 var RE_MONTH = new RegExp('(' + MONTHS.join(')$|(') + ')$');
 
-var units = ['year', 'month', 'week', 'day', 'hour', 'minute', 'seconds'];
-var unitsFreq = ['yearly', 'monthly', 'weekly', 'daily', 'hourly', 'minutely', 'secondly'];
+var units = [
+  'year', 'month', 'week', 'day', 
+  'hour', 'minute', 'seconds'
+];
+var unitsFreq = [
+  'yearly', 'monthly', 'weekly', 'daily', 
+  'hourly', 'minutely', 'secondly'
+];
 
 var RE_UNITS = new RegExp('^(' + units.join('s?|') + '?)$');
 
@@ -92,7 +101,7 @@ var RE_REPEAT = new RegExp('(?:every|each|\\bon\\b|repeat(s|ing)?)');
 var RE_START = new RegExp('(' + RE_STARTING.source + ')\\s(.*)');
 var RE_EVENT = new RegExp(
   '((?:every|each|\\bon\\b|repeat|' + RE_DAILY.source + '|' + 
-  RE_PLURAL_WEEKDAY.source + ')(?:s|ing)?(.*))');
+  RE_PLURAL_WKDAY.source + ')(?:s|ing)?(.*))');
 var RE_END = new RegExp(RE_ENDING.source + '(.*)');
 var RE_START_EVENT = new RegExp(RE_START.source + '\\s' + RE_EVENT.source);
 var RE_EVENT_START = new RegExp(RE_EVENT.source + '\\s' + RE_START.source);
@@ -104,6 +113,8 @@ var RE_SEP = new RegExp(
   '(from|to|through|thru|on|at|of|in|a|an|the|and|o|both)$');
 var RE_AMBIGMOD = new RegExp('(this|next|last)$');
 var RE_OTHER = new RegExp('other|alternate');
+var RE_FROM_NOW = new RegExp('(.+) from now');
+var RE_HRS_MINUTES = new RegExp('(.+) hours(?: and)? (.+) minutes');
 
 var RECUR_TYPES = {
   daily: RE_DAILY,
@@ -113,7 +124,7 @@ var RECUR_TYPES = {
   recurringUnit: RE_RECURRING_UNIT,
   ordinal: RE_ORDINAL,
   number: RE_NUMBER,
-  pluralWeekday: RE_PLURAL_WEEKDAY,
+  pluralWeekday: RE_PLURAL_WKDAY,
   weekday: RE_DOW,
   month: RE_MONTH
 };
@@ -127,7 +138,13 @@ var TYPES = extend({}, RECUR_TYPES, {
   other: RE_OTHER,
 });
 
-// add month parser to chrono to allow for, eg, "until november"
+
+/**
+ * Chrono.js parser extensions
+ */
+dateParser.parsers = Array.prototype.slice.call(chrono.casual.parsers);
+
+// support standalone month name, eg "next november"
 var monthParser = new chrono.Parser();
 monthParser.pattern = function() {
   return RE_MONTH;
@@ -142,9 +159,49 @@ monthParser.extract = function(text, ref, match) {
     }
   });
 };
-dateParser.parsers = chrono.casual.parsers;
 dateParser.parsers.push(monthParser);
 
+// support "2 hours and 30 minutes"
+var hrsAndMinParser = new chrono.Parser();
+hrsAndMinParser.pattern = function() {
+  return new RegExp('in ' + RE_HRS_MINUTES.source);
+};
+hrsAndMinParser.extract = function(text, ref, match) {
+  var resultHrs = dateParser.parse('in ' + match[1] + ' hours', ref);
+  var resultMin = dateParser.parse('in ' + match[2] + ' minutes', ref);
+  if (!resultHrs.length || !resultMin.length) {
+    return null;
+  }
+  return new chrono.ParsedResult({
+    ref: ref,
+    text: match[0],
+    index: match.index,
+    start: {
+      hour: resultHrs[0].start.knownValues.hour,
+      minute: resultMin[0].start.knownValues.minute
+    }
+  });
+};
+dateParser.parsers.push(hrsAndMinParser);
+
+// support time "from now", eg: "2 hours from now"
+var fromNowParser = new chrono.Parser();
+fromNowParser.pattern = function() {
+  return RE_FROM_NOW;
+};
+fromNowParser.extract = function(text, ref, match) {
+  var result = dateParser.parse('in ' + match[1], ref);
+  if (!result.length) {
+    return null;
+  }
+  return new chrono.ParsedResult({
+    ref: ref,
+    text: match[0],
+    index: match.index,
+    start: result[0].start.knownValues
+  });
+};
+dateParser.parsers.push(fromNowParser);
 
 function getNumber(s) {
   if (isNaN(parseInt(s))) {
@@ -196,8 +253,69 @@ function normalize(s) {
   return s.replace(/\s+/, ' ');
 }
 
-function dateToString(d) {
-  return d.getFullYear() + d.getMonth() + d.getDate();
+function anyCertain(parsed) {
+  var components = Array.prototype.slice.call(arguments, 1);
+  for (var i=0; i<components.length; i++) {
+    if (parsed.isCertain(components[i])) {
+      return true;
+    }
+  }
+}
+
+/*
+function allCertain(parsed) {
+  var components = Array.prototype.slice.call(arguments, 1);
+  for (var i=0; i<components.length; i++) {
+    if (!parsed.isCertain(components[i])) {
+      return false;
+    }
+  }
+}
+*/
+
+function formatRFC(property, parsed, refDate) {
+  var dateCertain = anyCertain(parsed, 'day', 'weekday', 'month', 'year');
+  var timeCertain = anyCertain(parsed, 'hour', 'minute', 'second');
+  var date = moment(parsed.date());
+  if (!dateCertain) {
+    var ref = moment(refDate);
+    date.set({year: ref.year(), month: ref.month(), date: ref.date()});
+  }
+  if (!timeCertain) {
+    date.set({ hours: 0, minutes: 0, seconds: 0, milliseconds: 0 });
+  }
+
+  // subject to change if a property needs to be a TIME type
+  var validTypes, types = ['DATE-TIME', 'DATE'];
+  if (property && property.toUpperCase() === 'COMPLETED') {
+    types = ['DATE-TIME'];
+  }
+
+  if (dateCertain && timeCertain) {
+    validTypes = ['DATE-TIME', 'DATE', 'TIME'];
+  } else if (dateCertain) {
+    validTypes = ['DATE', 'DATE-TIME', 'TIME'];
+  } else if (timeCertain) {
+    validTypes = ['TIME', 'DATE-TIME', 'DATE'];
+  }
+
+  var type = '';
+  for (var t=0; t<validTypes.length; t++) {
+    if (types.indexOf(validTypes[t]) !== -1) {
+      type = validTypes[t];
+      break;
+    }
+  }
+
+  var format = {
+    'DATE': 'YYYYMMDD',
+    'TIME': 'HHmmss',
+    'DATE-TIME': 'YYYYMMDDTHHmmss'
+  }[type.toUpperCase()];
+
+  if (!format) return '';
+
+  return date.format(format);
 }
 
 /**
@@ -290,10 +408,13 @@ function RRule(params) {
   this.byhour = [];
   this.byminute = [];
 
+  this.refDate = new Date();
+
   // not supported currently
   this.count = null;
   this.bysetpos = null;
   this.byweekno = null;
+
 
   for (var k in params) {
     if (this.hasOwnProperty(k)) {
@@ -301,27 +422,6 @@ function RRule(params) {
     }
   }
 }
-
-function getParsedDate(parsed) {
-  if (!parsed) {
-    return null;
-  }
-  var date = parsed.date();
-  if (!parsed.isCertain('hour')) {
-    date.setHours(0);
-  }
-  if (!parsed.isCertain('minutes')) {
-    date.setMinutes(0);
-  }
-  if (!parsed.isCertain('seconds')) {
-    date.setSeconds(0);
-  }
-  if (!parsed.isCertain('milliseconds')) {
-    date.setMilliseconds(0);
-  }
-  return date;
-}
-
 RRule.prototype = {
   get byday() {
     if (this.ordinalWeekdays.length) {
@@ -333,8 +433,8 @@ RRule.prototype = {
   },
 
   toString: function() {
-    var rrule = '';
-    var v, k, rules = [];
+    var rules = [];
+    var v, k;
     for (k in this) {
       v = this[k];
       if (v === null) {
@@ -347,7 +447,7 @@ RRule.prototype = {
         v = v.join(',');
       }
       if (v instanceof chrono.ParsedComponents) {
-        v = getParsedDate(v);
+        v = formatRFC(k, v, this.refDate);
       }
       if (typeof(v) === 'string' || typeof(v) === 'number') {
         if (typeof(v) === 'string') {
@@ -356,7 +456,7 @@ RRule.prototype = {
         rules.push(k.toUpperCase() + '=' + v);
       }
     }
-    return rrule + rules.join(';');
+    return rules.join(';');
   }
 };
 
@@ -374,11 +474,9 @@ ParsedResult.prototype = {
   toString: function() {
     var lines = [];
     if (this.dtstart) {
-      var dtstart = getParsedDate(this.dtstart);
-      lines.push('DTSTART:' + dateToString(dtstart));
+      lines.push('DTSTART:' + formatRFC('dtstart', this.dtstart, this.refDate));
       if (this.dtend) {
-        var dtend = getParsedDate(this.dtend);
-        lines.push('DTEND:' + dateToString(dtend));
+        lines.push('DTEND:' + formatRFC('dtstart', this.dtend, this.refDate));
       }
     }
     if (this.rrule) {
@@ -389,16 +487,23 @@ ParsedResult.prototype = {
 };
 
 
-function parse(phrase, refDate) {
+// TODO tests fail with refDate of midnight
+function parse(phrase, opts) {
+  opts = opts || {};
+  var defaults = {
+    preferAMStart: 8,
+    preferFuture: false
+  };
+  opts = extend(defaults, opts);
   var unparsed;
   var result = new ParsedResult();
   if (!phrase) {
     return result;
   }
 
+  result.opts = opts;
   result.phrase = unparsed = normalize(phrase);
-  result.refDate = refDate;
-  result.rrule = new RRule();
+  result.rrule = new RRule({refDate: opts.refDate});
 
   unparsed = parseStartAndEnd(unparsed, result);
 
@@ -417,15 +522,15 @@ function parse(phrase, refDate) {
     // get time/times if its obvious
     var match = RE_AT_TIME.exec(unparsed);
     if (match) {
-      parseRecurringTime(match[1], result);
+      parseRecurringTime(match[0], result);
     }
   } else {
     // no recurrence, try just date/time
-    var parsed = parseDateTime(unparsed, result.refDate);
-    if (parsed.length && parsed[0].start) {
-      result.dtstart = parsed[0].start;
+    var parsed = parseDate(unparsed, opts);
+    if (parsed.start) {
+      result.dtstart = parsed.start;
       if (parsed.end) {
-        result.dtend = parsed[0].end;
+        result.dtend = parsed.end;
       }
     }
   }
@@ -438,14 +543,14 @@ function parseStartAndEnd(phrase, result) {
 
   match = RE_START_EVENT.exec(phrase);
   if (match) {
-    result.dtstart = parseDate(match[2], result.refDate);
+    result.dtstart = parseDate(match[2], result.opts).start;
     return extractEnding(match[3], result);
   }
 
   match = RE_EVENT_START.exec(phrase);
   if (match) {
     start = extractEnding(match[5], result);
-    result.dtstart = parseDate(start, result.refDate);
+    result.dtstart = parseDate(start, result.opts).start;
     return match[1];
   }
 
@@ -456,10 +561,8 @@ function parseStartAndEnd(phrase, result) {
     // * when freq > from/to: from/to acts as recurring duration
     // * otherwise: from/to acts as the rrule bounds (rrule.until)
     onRecurrenceParsed(function(rrule) {
-      var from = parseDateTime(match[2], result.refDate);
-      var to = parseDateTime(match[4], result.refDate);
-      from = from.length ? from[0].start : null;
-      to = to.length ? to[0].start : null;
+      var from = parseDate(match[2], result.opts).start;
+      var to = parseDate(match[4], result.opts).start;
 
       // We assume from/to have same resolution (eg, hour-to-hour, day-to-day)
       var knownValues = from.knownValues;
@@ -470,14 +573,14 @@ function parseStartAndEnd(phrase, result) {
           max = idx;
         }
       }
-      result.dtstart = getParsedDate(from);
+      result.dtstart = from;
       if (!to) {
         return;
       }
       if (unitsFreq.indexOf(rrule.freq) < max) {
-        result.dtend = getParsedDate(to);
+        result.dtend = to;
       } else {
-        result.rrule.until = getParsedDate(to);
+        result.rrule.until = to;
       }
     });
     return match[1];
@@ -489,44 +592,65 @@ function parseStartAndEnd(phrase, result) {
 function extractEnding(phrase, result) {
   var match = RE_OTHER_END.exec(phrase);
   if (match) {
-    result.rrule.until = parseDate(match[2], result.refDate);
+    result.rrule.until = parseDate(match[2], result.opts).start;
     return match[1];
   }
   return phrase;
 }
 
 function parseRecurringTime(phrase, result) {
-  var parsedTime = dateParser.parse(phrase, result.refDate);
+  var dateResult;
+  var parsedTime = dateParser.parse(phrase, result.opts.refDate);
   for (var i=0; i<parsedTime.length; i++) {
     if (!parsedTime[i].start) {
       continue;
     }
-    if (parsedTime[i].start.isCertain('hour')) {
-      result.rrule.byhour.push(parsedTime[i].start.get('hour'));
+
+    dateResult = refineDate(parsedTime[i].start, result.opts);
+    if (dateResult.isCertain('hour')) {
+      result.rrule.byhour.push(dateResult.get('hour'));
     }
-    if (parsedTime[i].start.isCertain('minute')) {
-      result.rrule.byminute.push(parsedTime[i].start.get('minute'));
+    if (dateResult.isCertain('minute')) {
+      result.rrule.byminute.push(dateResult.get('minute'));
     }
   }
 }
 
-function parseDate(date, refDate) {
-  // parse a single date
-  var parsed = dateParser.parse(date, refDate);
-  return parsed.length ? parsed[0].start : null;
+function refineDate(dateResult, opts) {
+  if (!dateResult) {
+    return dateResult;
+  }
+  if (opts.preferFuture && dateResult.date() < opts.refDate) {
+    // if weekday is known but day is not, prefer the future date
+    if (!dateResult.isCertain('day') && dateResult.isCertain('weekday')) {
+      var date = moment(dateResult.date());
+      date.add(7, 'days');
+      dateResult.imply('day', date.date()); 
+      dateResult.imply('month', date.month() + 1);
+      dateResult.imply('year', date.year());
+    }
+  }
+  var hour = dateResult.get('hour');
+  if (!dateResult.isCertain('meridiem') && hour < opts.preferAMStart) {
+    dateResult.assign('hour', hour +  12);
+    dateResult.imply('meridiem', 1);
+  }
+  return dateResult;
 }
 
-function parseDateTime(date, refDate) {
-  // parse a date/datetime and return the chrono parseResult
-  var parsed = dateParser.parse(date, refDate);
-  return parsed.length ? parsed : null;
+function parseDate(date, opts) {
+  var parsed = dateParser.parse(date, opts.refDate);
+  parsed = parsed.length ? parsed[0] : {start: null, end: null};
+  parsed.start = refineDate(parsed.start, opts);
+  parsed.end = refineDate(parsed.end, opts);
+  return parsed;
 }
-
 
 var onRecurrenceParsedListeners = [];
 function onRecurrenceParsed(cb) {
   onRecurrenceParsedListeners.push(cb);
 }
+
 function fireOnRecurrenceParsed(rrule) {
   for (var i=0; i<onRecurrenceParsedListeners.length; i++) {
     onRecurrenceParsedListeners[i](rrule);
@@ -645,7 +769,8 @@ function parseRecurrence(phrase, result) {
         if (!rrule.freq) {
           rrule.freq = 'weekly';
         }
-        rrule.weekdays = rrule.weekdays.concat(getDaysOfWeek(t.get(index).text));
+        var daysOfWeek = getDaysOfWeek(t.get(index).text);
+        rrule.weekdays = rrule.weekdays.concat(daysOfWeek);
       } else if (t.get(index).type === 'month') {
         // if we have a month we assume frequency is yearly if it hasnt
         // been set.
@@ -655,8 +780,8 @@ function parseRecurrence(phrase, result) {
         rrule.bymonth.push((getMonth(t.get(index).text)).toString());
         // TODO: should iterate this ordinal as well...
         if (index + 1 < t.length && t.get(index + 1).type === 'ordinal') {
-          rrule.bymonthday.push(
-            getOrdinalIndex(t.get(index + 1).text).toString());
+          var oidx = getOrdinalIndex(t.get(index + 1).text).toString();
+          rrule.bymonthday.push(oidx);
         }
       }
       index += 1;
@@ -669,9 +794,11 @@ function parseRecurrence(phrase, result) {
 
 return {
   parse: parse,
-  getParsedDate: getParsedDate,
+  formatRFC: formatRFC,
   ParsedResult: ParsedResult,
   RRule: RRule
 };
 
 })();
+
+// vim: tw=79

@@ -235,7 +235,7 @@ var phrases = [
     'daily starting march 3rd', 
     {
       'freq': 'daily', 
-      'dtstart': new Date(2015, 2, 3), 
+      'dtstart': '20150303', 
       'interval': 1
     }
   ], 
@@ -243,7 +243,7 @@ var phrases = [
     'starting tomorrow on weekends', 
     {
       'byday': 'SA,SU', 
-      'dtstart': new Date(2015, 0, 2), 
+      'dtstart': '20150102', 
       'freq': 'weekly', 
       'interval': 1
     }
@@ -252,8 +252,8 @@ var phrases = [
     'daily starting march 3rd until april 5th', 
     {
       'freq': 'daily', 
-      'dtstart': new Date(2015, 2, 3), 
-      'until': new Date(2015, 3, 5), 
+      'dtstart': '20150303', 
+      'until': '20150405', 
       'interval': 1
     }
   ], 
@@ -263,14 +263,14 @@ var phrases = [
       'byday': 'WE', 
       'interval': 1, 
       'freq': 'weekly', 
-      'until': new Date(2015, 10, 1)
+      'until': '20151101'
     }
   ], 
   [
     'every 4th of the month starting next tuesday', 
     {
       'freq': 'monthly', 
-      'dtstart': new Date(2015, 0, 6), 
+      'dtstart': '20150106', 
       'bymonthday': '4', 
       'interval': 1
     }
@@ -279,8 +279,8 @@ var phrases = [
     'mondays and thursdays from jan 1 to march 25th', 
     {
       'byday': 'MO,TH', 
-      'dtstart': new Date(2015, 0, 1), 
-      'until': new Date(2015, 2, 25), 
+      'dtstart': '20150101', 
+      'until': '20150325', 
       'freq': 'weekly', 
       'interval': 1
     }
@@ -327,6 +327,15 @@ var phrases = [
     }
   ], 
   [
+    'daily at 3', 
+    {
+      'byminute': '0', 
+      'freq': 'daily', 
+      'byhour': '15', 
+      'interval': 1
+    }
+  ],
+  [
     'daily at 3:00pm', 
     {
       'byminute': '0', 
@@ -337,46 +346,62 @@ var phrases = [
   ], 
   [
     'march 3rd', 
-    {'dtstart': new Date(2015, 2, 3)}
+    {'dtstart': '20150303'}
   ], 
   [
     'tomorrow', 
-    {'dtstart': new Date(2015, 0, 2)}
+    {'dtstart': '20150102'}
   ], 
   [
     'mar 2 2012', 
-    {'dtstart': new Date(2012, 2, 2)}
+    {'dtstart': '20120302'}
   ], 
   [
     'this sunday', 
-    {'dtstart': new Date(2015, 0, 3)}
+    {'dtstart': '20150104'}
   ], 
+  [
+    'this sunday at 3:00pm',
+    {'dtstart': '20150104T150000'}
+  ],
+  [
+    'this sunday at 3',
+    {'dtstart': '20150104T150000'}
+  ],
   [
     'thursday, february 18th', 
     null
   ], 
   [
     'march 3rd at 12:15am', 
-    {'dtstart': new Date(2015, 2, 3, 0, 15, 0)}
+    {'dtstart': '20150303T001500'}
   ], 
   [
     'tomorrow at 3:30', 
-    {'dtstart': new Date(2015, 0, 2, 15, 30, 0)}
+    {'dtstart': '20150102T153000'}
   ], 
   [
     'in 30 minutes', 
-    {'dtstart': new Date(2015, 0, 1, 0, 30, 0)}
+    {'dtstart': '20150101T123000'}
   ], 
   [
     'at 4', 
-    {'dtstart': new Date(2015, 0, 1, 16, 0, 0)}
+    {'dtstart': '20150101T160000'}
   ], 
   [
     '2 hours from now', 
-    {'dtstart': new Date(2015, 0, 1, 2, 0, 0)}
+    {'dtstart': '20150101T140000'}
+  ], 
+  [
+    '2 hours and 30 minutes from now', 
+    {'dtstart': '20150101T143000'}
+  ], 
+  [
+    '2 hours 30 minutes from now', 
+    {'dtstart': '20150101T143000'}
   ], 
   [
     'sunday at 2', 
-    {'dtstart': new Date(2015, 0, 3, 14, 0, 0)}
+    {'dtstart': '20150104T140000'}
   ]
 ];
