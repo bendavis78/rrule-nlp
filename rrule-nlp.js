@@ -441,13 +441,18 @@ function getRRuleDescriptor(opt) {
 }
 RRule = function(params, noCache) {
   params = params || {};
+  var desc;
   for (var opt in BaseRRule.DEFAULT_OPTIONS) {
-    var desc = getRRuleDescriptor.call(this, opt);
+    desc = getRRuleDescriptor.call(this, opt);
     Object.defineProperty(this, opt, desc);
-
   }
   this._parsedComponents = {};
+
   BaseRRule.call(this, params, noCache);
+
+  // don't let BaseRRule set a default wkst
+  this.options.wkst = params.wkst || null;
+
   for (opt in BaseRRule.DEFAULT_OPTIONS) {
     // initialize by* keys to an empty array
     if (opt.match(/^by[a-z]+/)) {
@@ -455,15 +460,61 @@ RRule = function(params, noCache) {
     }
   }
 };
-RRule.prototype = Object.create(BaseRRule.prototype);
+RRule.prototype = Object.create(BaseRRule.prototype, {
+  origOptions: {
+    get: function() {
+      var opts = {};
+      var v;
+      for (var k in this.options) {
+        v = this.options[k]; 
+        if (v instanceof Array && v.length === 0) {
+          v = null;
+        }
+        opts[k] = v;
+      }
+      return opts;
+    }
+  }
+});
 RRule.prototype.fromText = function(phrase, opts) {
   return parse(phrase, opts);
 };
 RRule.prototype.optionsToString = function() {
   return BaseRRule.optionsToString(this.options);
 };
+RRule.prototype.toString = function() {
+  return BaseRRule.optionsToString(this.options);
+};
 RRule.prototype.componentToRFCString = function(property) {
   return formatRFC(property, this[property], this.refDate); 
+};
+RRule.prototype.toText = function() {
+  // monkeypatch options for toText()
+  var orig = {};
+  var v;
+  for (var k in this.options) {
+    v = this.options[k];
+    orig[k] = v;
+    if (v instanceof Array && v.length === 0) {
+      if (!k.match(/^byn/)) {
+        this.options[k] = null;
+      }
+    }
+  }
+  var text = BaseRRule.prototype.toText.call(this);
+  this.options = orig;
+  if (text.match(/RRule error:/)) {
+    return null;
+  }
+  if (this.byhour.length) {
+    text += ' at ';
+    var hrs = this.byhour.map(function(h) {
+      var m = ('00' + (this.byminute[0] || '')).slice(-2);
+      return h % 12 + ':' + m + (h < 12 ? 'am' : 'pm');
+    }.bind(this));
+    text += hrs.join(', ');
+  }
+  return text;
 };
 RRule.prototype.constructor = RRule;
 
@@ -522,9 +573,13 @@ Event.prototype = {
 
   toString: function() {
     if (this.rrule) {
-      return this.rrule.toText();
+      var text = this.rrule.toText();
+      if (!text) {
+        return this.phrase;
+      }
+      return text;
     } else {
-      return this.dtstart.toString();
+      return this.dtstart.date().toString();
     }
   },
 };

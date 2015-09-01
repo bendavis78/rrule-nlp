@@ -18,6 +18,7 @@
       verbose = result.toString();
     } catch (e) {
       rfcString = null;
+      verbose = null;
       errors.push(e);
     }
     if (errors.length) {
@@ -37,9 +38,9 @@
       }
       console.groupEnd();
     } else {
-      console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
-      console.log('%c' + verbose, 'color: #333');
+      console.group('%cSuccess: ' + phrase, 'color: green');
       console.log('%c' + rfcString, 'color: blue');
+      console.log('%c' + verbose, 'color: #333');
       //console.log('Result: ', result);
       console.groupEnd();
     }

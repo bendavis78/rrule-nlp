@@ -337,9 +337,9 @@ var phrases = [
     }
   ],
   [
-    'daily at 3:00pm', 
+    'daily at 3:20pm', 
     {
-      'byminute': [0], 
+      'byminute': [20], 
       'freq': rrule.DAILY, 
       'byhour': [15], 
       'interval': 1
