@@ -1,5 +1,8 @@
 <script src="../bower_components/chrono/chrono.min.js"></script>
 <script src="../bower_components/moment/min/moment.min.js"></script>
+<script src="../bower_components/rrule/lib/rrule.js"></script>
+<script src="../bower_components/rrule/lib/nlp.js"></script>
+
 <script src="../rrule-nlp.js"></script>
 <script src="phrases.js"></script>
 
@@ -8,10 +11,11 @@
   var phrase, expected, result, i, k;
 
   function logResult(errors, result) {
-    var rfcString;
+    var rfcString, verbose;
     errors = errors || [];
     try {
-      rfcString = result.toString();
+      rfcString = result.toRFCString();
+      verbose = result.toString();
     } catch (e) {
       rfcString = null;
       errors.push(e);
@@ -21,8 +25,8 @@
       for (var e=0; e<errors.length; e++) {
         if (errors[e].key) {
           console.group(errors[e].key);
-          console.log('Expected: ', errors[e].expected);
-          console.log('Result: ', errors[e].result);
+          console.log('Expected: ', serialize(errors[e].expected));
+          console.log('Result: ', serialize(errors[e].result));
           console.log(result);
           console.groupEnd();
         } else if (errors[e] instanceof Error) {
@@ -34,20 +38,26 @@
       console.groupEnd();
     } else {
       console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
-      console.log('Result: ', result);
+      console.log('%c' + verbose, 'color: #333');
       console.log('%c' + rfcString, 'color: blue');
+      //console.log('Result: ', result);
       console.groupEnd();
     }
   }
 
-  function cmp(expected, result) {
-    if (expected instanceof Array) {
-      expected = ','.join(expected);
-      result = ','.join(result);
-    } else if (expected instanceof Date) {
-      expected = expected.getTime();
-      result = result && result.getTime ? result.getTime() : result;
+  function serialize(obj) {
+    if (obj instanceof String || obj instanceof Number) {
+      return obj;
     }
+    if (obj instanceof Date) {
+      return obj.getTime();
+    }
+    return JSON.stringify(obj);
+  }
+
+  function cmp(expected, result) {
+    expected = serialize(expected);
+    result = serialize(result);
     return expected == result;
   }
 
@@ -65,8 +75,8 @@
 
     try {
       result = rrule.parse(phrase, opts);
-      if (!(result instanceof rrule.ParsedResult)) {
-        throw new Error('result is not a ParsedResult object');
+      if (!(result instanceof rrule.Event)) {
+        throw new Error('result is not a Event object');
       }
     } catch (e) {
       if (expected !== null) {
@@ -77,16 +87,13 @@
     }
     if (typeof(expected) === 'object') {
       for (k in expected) {
-        if (!result.rrule) {
-          result.rrule = {};
-        }
-        chkResult = result.rrule;
+        chkResult = result.rrule || {};
         if (/dt(start|end)/.test(k)) {
           chkResult = result;
         }
         chkValue = chkResult[k];
         if (chkValue instanceof chrono.ParsedComponents) {
-          chkValue = rrule.formatRFC(k, chkResult[k], opts.refDate);
+          chkValue = chkResult.componentToRFCString(k);
         }
         if (!cmp(expected[k], chkValue)) {
           errors.push({key: k, expected: expected[k], result: chkValue});
@@ -98,4 +105,11 @@
 
     logResult(errors, result);
   }
+
+  for (var i=0; i<window.phrases.length; i++) {
+    phrase = window.phrases[i][0];
+    result = rrule.parse(phrase);
+  }
 </script>
+
+<p>See JavaScript console for test results.</p>

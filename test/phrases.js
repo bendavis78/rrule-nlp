@@ -1,240 +1,241 @@
 /* exported phrases */
+/* globals rrule */
 var phrases = [
   [
     'daily', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'interval': 1
     }
   ], 
   [
     'each day', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'interval': 1
     }
   ], 
   [
     'everyday', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'interval': 1
     }
   ], 
   [
     'every other day', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'interval': 2
     }
   ], 
   [
     'tuesdays', 
     {
-      'byday': 'TU', 
+      'byweekday': [rrule.TU], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'weekends', 
     {
-      'byday': 'SA,SU', 
+      'byweekday': rrule.WEEKENDS,
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'weekdays', 
     {
-      'byday': 'MO,TU,WE,TH,FR', 
+      'byweekday': rrule.WEEKDAYS,
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every weekday', 
     {
-      'byday': 'MO,TU,WE,TH,FR', 
+      'byweekday': rrule.WEEKDAYS, 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'tuesdays and thursdays', 
     {
-      'byday': 'TU,TH', 
+      'byweekday': [rrule.TU, rrule.TH], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'weekly on wednesdays', 
     {
-      'byday': 'WE', 
+      'byweekday': [rrule.WE], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'weekly on wednesdays and fridays', 
     {
-      'byday': 'WE,FR', 
+      'byweekday': [rrule.WE, rrule.FR], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every sunday and saturday', 
     {
-      'byday': 'SU,SA', 
+      'byweekday': rrule.WEEKENDS, 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every wed', 
     {
-      'byday': 'WE', 
+      'byweekday': [rrule.WE], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every wed.', 
     {
-      'byday': 'WE', 
+      'byweekday': [rrule.WE], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every wednsday', 
     {
-      'byday': 'WE', 
+      'byweekday': [rrule.WE], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every week on tues', 
     {
-      'byday': 'TU', 
+      'byweekday': [rrule.TU], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'once a week on sunday', 
     {
-      'byday': 'SU', 
+      'byweekday': [rrule.SU], 
       'interval': 1, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every 3 weeks on mon', 
     {
-      'byday': 'MO', 
+      'byweekday': [rrule.MO], 
       'interval': 3, 
-      'freq': 'weekly'
+      'freq': rrule.WEEKLY
     }
   ], 
   [
     'every 3 days', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'interval': 3
     }
   ], 
   [
     'every 4th of the month', 
     {
-      'freq': 'monthly', 
+      'freq': rrule.MONTHLY, 
       'interval': 1, 
-      'bymonthday': '4'
+      'bymonthday': [4] 
     }
   ], 
   [
     'every 4th and 10th of the month', 
     {
-      'freq': 'monthly', 
+      'freq': rrule.MONTHLY, 
       'interval': 1, 
-      'bymonthday': '4,10'
+      'bymonthday': [4, 10]
     }
   ], 
   [
     'every first friday of the month', 
     {
-      'byday': '1FR', 
+      'byweekday': [rrule.FR.nth(1)], 
       'interval': 1, 
-      'freq': 'monthly'
+      'freq': rrule.MONTHLY
     }
   ], 
   [
     'first friday of every month', 
     {
-      'byday': '1FR', 
+      'byweekday': [rrule.FR.nth(1)], 
       'interval': 1, 
-      'freq': 'monthly'
+      'freq': rrule.MONTHLY
     }
   ], 
   [
     'first friday of each month', 
     {
-      'byday': '1FR', 
+      'byweekday': [rrule.FR.nth(1)], 
       'interval': 1, 
-      'freq': 'monthly'
+      'freq': rrule.MONTHLY
     }
   ], 
   [
     'first and third friday of each month', 
     {
-      'byday': '1FR,3FR', 
+      'byweekday': [rrule.FR.nth(1), rrule.FR.nth(3)],
       'interval': 1, 
-      'freq': 'monthly'
+      'freq': rrule.MONTHLY
     }
   ], 
   [
     'yearly on the fourth thursday in november', 
     {
-      'bymonth': '11', 
-      'byday': '4TH', 
+      'bymonth': [11], 
+      'byweekday': [rrule.TH.nth(4)], 
       'interval': 1, 
-      'freq': 'yearly'
+      'freq': rrule.YEARLY
     }
   ], 
   [
     'every year on the fourth thursday in november', 
     {
-      'bymonth': '11', 
-      'byday': '4TH', 
+      'bymonth': [11], 
+      'byweekday': [rrule.TH.nth(4)], 
       'interval': 1, 
-      'freq': 'yearly'
+      'freq': rrule.YEARLY
     }
   ], 
   [
     'once a year on december 25th', 
     {
-      'bymonth': '12', 
-      'freq': 'yearly', 
+      'bymonth': [12], 
+      'freq': rrule.YEARLY, 
       'interval': 1, 
-      'bymonthday': '25'
+      'bymonthday': [25]
     }
   ], 
   [
     'every july 4th', 
     {
-      'bymonth': '7', 
-      'freq': 'yearly', 
+      'bymonth': [7], 
+      'freq': rrule.YEARLY, 
       'interval': 1, 
-      'bymonthday': '4'
+      'bymonthday': [4]
     }
   ], 
   [
     'daily starting march 3rd', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'dtstart': '20150303', 
       'interval': 1
     }
@@ -242,16 +243,16 @@ var phrases = [
   [
     'starting tomorrow on weekends', 
     {
-      'byday': 'SA,SU', 
+      'byweekday': rrule.WEEKENDS, 
       'dtstart': '20150102', 
-      'freq': 'weekly', 
+      'freq': rrule.WEEKLY, 
       'interval': 1
     }
   ], 
   [
     'daily starting march 3rd until april 5th', 
     {
-      'freq': 'daily', 
+      'freq': rrule.DAILY, 
       'dtstart': '20150303', 
       'until': '20150405', 
       'interval': 1
@@ -260,56 +261,56 @@ var phrases = [
   [
     'every wed until november', 
     {
-      'byday': 'WE', 
+      'byweekday': [rrule.WE], 
       'interval': 1, 
-      'freq': 'weekly', 
+      'freq': rrule.WEEKLY, 
       'until': '20151101'
     }
   ], 
   [
     'every 4th of the month starting next tuesday', 
     {
-      'freq': 'monthly', 
+      'freq': rrule.MONTHLY, 
       'dtstart': '20150106', 
-      'bymonthday': '4', 
+      'bymonthday': [4], 
       'interval': 1
     }
   ], 
   [
     'mondays and thursdays from jan 1 to march 25th', 
     {
-      'byday': 'MO,TH', 
+      'byweekday': [rrule.MO, rrule.TH], 
       'dtstart': '20150101', 
       'until': '20150325', 
-      'freq': 'weekly', 
+      'freq': rrule.WEEKLY, 
       'interval': 1
     }
   ], 
   [
     'every 5 minutes', 
     {
-      'freq': 'minutely', 
+      'freq': rrule.MINUTELY, 
       'interval': 5
     }
   ], 
   [
     'every 30 seconds', 
     {
-      'freq': 'secondly', 
+      'freq': rrule.SECONDLY, 
       'interval': 30
     }
   ], 
   [
     'every other hour', 
     {
-      'freq': 'hourly', 
+      'freq': rrule.HOURLY, 
       'interval': 2
     }
   ], 
   [
     'every 2 hours', 
     {
-      'freq': 'hourly', 
+      'freq': rrule.HOURLY, 
       'interval': 2
     }
   ], 
@@ -320,27 +321,27 @@ var phrases = [
   [
     'daily at 3pm', 
     {
-      'byminute': '0', 
-      'freq': 'daily', 
-      'byhour': '15', 
+      'byminute': [0], 
+      'freq': rrule.DAILY, 
+      'byhour': [15], 
       'interval': 1
     }
   ], 
   [
     'daily at 3', 
     {
-      'byminute': '0', 
-      'freq': 'daily', 
-      'byhour': '15', 
+      'byminute': [0], 
+      'freq': rrule.DAILY, 
+      'byhour': [15], 
       'interval': 1
     }
   ],
   [
     'daily at 3:00pm', 
     {
-      'byminute': '0', 
-      'freq': 'daily', 
-      'byhour': '15', 
+      'byminute': [0], 
+      'freq': rrule.DAILY, 
+      'byhour': [15], 
       'interval': 1
     }
   ], 

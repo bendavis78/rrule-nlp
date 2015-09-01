@@ -1,9 +1,11 @@
-/* globals chrono, moment */
+/* globals chrono, moment, RRule: true */
 /* exported rrule */
-var rrule = (function() {
+var rrule = (function(RRule) {
 
-var dateParser = new chrono.Chrono();
+// exported module
+var rrule = {};
 
+// basic object extend utility
 var extend = function(obj) {
   obj = obj || {};
   for (var i = 1; i < arguments.length; i++) {
@@ -19,6 +21,10 @@ var extend = function(obj) {
   return obj;
 };
 
+//=============================================================================
+// Constants
+//=============================================================================
+
 var DAYS_OF_WEEK = [
   'mon(day)?',
   'tues?(day)?',
@@ -26,22 +32,17 @@ var DAYS_OF_WEEK = [
   '(th(urs|ers)day)|(thur?s?)',
   'fri(day)?',
   'sat([ue]rday)?',
-  'sun(day)?',
-  'weekday',
-  'weekend'
+  'sun(day)?'
 ];
 
 var RE_DOWS = DAYS_OF_WEEK.map(function(r) {
   return new RegExp(r);
 });
+var RE_WEEKDAY = new RegExp('weekday');
+var RE_WEEKEND = new RegExp('weekend');
 var RE_DOW = new RegExp('(' + DAYS_OF_WEEK.join(')|(') + ')');
 var RE_PLURAL_DOW = /(mon|tues|wednes|thurs|fri|satur|sun)days/;
 var RE_PLURAL_WKDAY = new RegExp('weekdays|weekends|' + RE_PLURAL_DOW.source);
-
-var weekdayCodes = [
-  'MO','TU','WE','TH','FR', 'SA', 'SU',
-  'MO,TU,WE,TH,FR', 'SA,SU'
-];
 
 var MONTHS = [
   'jan(uary)?',
@@ -65,10 +66,6 @@ var RE_MONTH = new RegExp('(' + MONTHS.join(')$|(') + ')$');
 var units = [
   'year', 'month', 'week', 'day', 
   'hour', 'minute', 'seconds'
-];
-var unitsFreq = [
-  'yearly', 'monthly', 'weekly', 'daily', 
-  'hourly', 'minutely', 'secondly'
 ];
 
 var RE_UNITS = new RegExp('^(' + units.join('s?|') + '?)$');
@@ -116,6 +113,8 @@ var RE_OTHER = new RegExp('other|alternate');
 var RE_FROM_NOW = new RegExp('(.+) from now');
 var RE_HRS_MINUTES = new RegExp('(.+) hours(?: and)? (.+) minutes');
 
+var RE_WKDAY_TYPE = new RegExp(RE_DOW.source + '|(weekday)|(weekend)');
+
 var RECUR_TYPES = {
   daily: RE_DAILY,
   every: RE_EVERY,
@@ -125,11 +124,11 @@ var RECUR_TYPES = {
   ordinal: RE_ORDINAL,
   number: RE_NUMBER,
   pluralWeekday: RE_PLURAL_WKDAY,
-  weekday: RE_DOW,
+  weekday: RE_WKDAY_TYPE,
   month: RE_MONTH
 };
 
-var TYPES = extend({}, RECUR_TYPES, {
+var TOKEN_TYPES = extend({}, RECUR_TYPES, {
   ambigmod: RE_AMBIGMOD,
   starting: RE_STARTING,
   ending: RE_ENDING,
@@ -139,9 +138,11 @@ var TYPES = extend({}, RECUR_TYPES, {
 });
 
 
-/**
- * Chrono.js parser extensions
- */
+//=============================================================================
+// Chrono.js parser extensions
+//=============================================================================
+
+var dateParser = new chrono.Chrono();
 dateParser.parsers = Array.prototype.slice.call(chrono.casual.parsers);
 
 // support standalone month name, eg "next november"
@@ -203,6 +204,11 @@ fromNowParser.extract = function(text, ref, match) {
 };
 dateParser.parsers.push(fromNowParser);
 
+
+//=============================================================================
+// Utility Functions
+//=============================================================================
+
 function getNumber(s) {
   if (isNaN(parseInt(s))) {
     return numbers.indexOf(s);
@@ -226,8 +232,14 @@ function getOrdinalIndex(s) {
 function getDaysOfWeek(s) {
   for (var i=0; i<RE_DOWS.length; i++) {
     if (RE_DOWS[i].test(s)) {
-      return weekdayCodes[i].split(',');
+      return [rrule.DAYS_OF_WEEK[i]];
     }
+  }
+  if (RE_WEEKDAY.test(s)) {
+    return rrule.WEEKDAYS;
+  }
+  if (RE_WEEKEND.test(s)) {
+    return rrule.WEEKENDS;
   }
 }
 
@@ -242,7 +254,7 @@ function getMonth(s) {
 function getUnitFreq(s) {
   for (var i=0; i<units.length; i++) {
     if (s.indexOf(units[i]) !== -1) {
-      return unitsFreq[i];
+      return rrule[rrule.FREQUENCIES[i]];
     }
   }
 }
@@ -318,32 +330,34 @@ function formatRFC(property, parsed, refDate) {
   return date.format(format);
 }
 
-/**
- * Token class
- */
-function Token(text, allText, type) {
+//=============================================================================
+// Token
+//=============================================================================
+
+function Token(tokenizer, text, type) {
+  this.tokenizer = tokenizer;
   this.text = text;
-  this.allText = allText;
   this.type = type;
 }
 
 Token.prototype.toString = function() {
-  return '<Token ' + this.text + ': ' + this.type + '>';
+  return '<Token "' + this.text + '": ' + this.type + '>';
 };
 
 
-/**
- * Tokenizer class
- */
+//=============================================================================
+// Tokenizer
+//=============================================================================
+
 function Tokenizer(text) {
   this._text = text;
   this._tokens = [];
   var type;
   var tokens = text.split(' ');
   for (var i=0; i<tokens.length; i++) {
-    for (type in TYPES) {
-      if (TYPES[type].test(tokens[i])) {
-        this._tokens.push(new Token(tokens[i], text, type));
+    for (type in TOKEN_TYPES) {
+      if (TOKEN_TYPES[type].test(tokens[i])) {
+        this._tokens.push(new Token(this, tokens[i], type));
         break;
       }
     }
@@ -396,96 +410,124 @@ Tokenizer.prototype = {
   }
 };
 
-function RRule(params) {
-  this.until = null;
-  this.interval = null;
-  this.freq = null;
-  this.weekdays = [];
-  this.ordinalWeekdays = [];
-  this.bymonthday = [];
-  this.byyearday = [];
-  this.bymonth = [];
-  this.byhour = [];
-  this.byminute = [];
+//=============================================================================
+// RRule
+//=============================================================================
 
-  this.refDate = new Date();
-
-  // not supported currently
-  this.count = null;
-  this.bysetpos = null;
-  this.byweekno = null;
-
-
-  for (var k in params) {
-    if (this.hasOwnProperty(k)) {
-      this[k] = params[k];
-    }
+var BaseRRule = RRule;
+function getRRuleDescriptor(opt) {
+  if (opt === 'dtstart') {
+    return {
+      value: null
+    };
   }
-}
-RRule.prototype = {
-  get byday() {
-    if (this.ordinalWeekdays.length) {
-      return Array.prototype.slice.call(this.ordinalWeekdays);
-    } else if (this.weekdays.length) {
-      return Array.prototype.slice.call(this.weekdays);
+  var desc = {
+    get: function() {
+      if (this._parsedComponents[opt]) {
+        return this._parsedComponents[opt];
+      }
+      return this.options[opt];
+    },
+    set: function(value) {
+      if (value instanceof chrono.ParsedComponents) {
+        this._parsedComponents[opt] = value;
+        value = value.date();
+      }
+      this.options[opt] = value;
     }
-    return null;
-  },
+  };
 
-  toString: function() {
-    var rules = [];
-    var v, k;
-    for (k in this) {
-      v = this[k];
-      if (v === null) {
-        continue;
-      }
-      if (v instanceof Array) {
-        if (!v.length) {
-          continue;
-        }
-        v = v.join(',');
-      }
-      if (v instanceof chrono.ParsedComponents) {
-        v = formatRFC(k, v, this.refDate);
-      }
-      if (typeof(v) === 'string' || typeof(v) === 'number') {
-        if (typeof(v) === 'string') {
-          v = v.toUpperCase();
-        }
-        rules.push(k.toUpperCase() + '=' + v);
-      }
+  return desc;
+}
+RRule = function(params, noCache) {
+  params = params || {};
+  for (var opt in BaseRRule.DEFAULT_OPTIONS) {
+    var desc = getRRuleDescriptor.call(this, opt);
+    Object.defineProperty(this, opt, desc);
+
+  }
+  this._parsedComponents = {};
+  BaseRRule.call(this, params, noCache);
+  for (opt in BaseRRule.DEFAULT_OPTIONS) {
+    // initialize by* keys to an empty array
+    if (opt.match(/^by[a-z]+/)) {
+      this[opt] = [];
     }
-    return rules.join(';');
   }
 };
+RRule.prototype = Object.create(BaseRRule.prototype);
+RRule.prototype.fromText = function(phrase, opts) {
+  return parse(phrase, opts);
+};
+RRule.prototype.optionsToString = function() {
+  return BaseRRule.optionsToString(this.options);
+};
+RRule.prototype.componentToRFCString = function(property) {
+  return formatRFC(property, this[property], this.refDate); 
+};
+RRule.prototype.constructor = RRule;
 
-/**
- * ParsedResult class
- */
-function ParsedResult() {
+rrule.FREQUENCIES = BaseRRule.FREQUENCIES;
+var i;
+for (i=0; i<rrule.FREQUENCIES.length; i++) {
+  rrule[rrule.FREQUENCIES[i]] = i;
+}
+
+rrule.DAYS_OF_WEEK = [
+  BaseRRule.MO,
+  BaseRRule.TU,
+  BaseRRule.WE,
+  BaseRRule.TH,
+  BaseRRule.FR,
+  BaseRRule.SA,
+  BaseRRule.SU
+];
+for (i=0; i<rrule.DAYS_OF_WEEK.length; i++) {
+  rrule[rrule.DAYS_OF_WEEK[i].toString()] = rrule.DAYS_OF_WEEK[i];
+}
+rrule.WEEKDAYS = rrule.DAYS_OF_WEEK.slice(0, 5);
+rrule.WEEKENDS = rrule.DAYS_OF_WEEK.slice(5, 7);
+
+
+//=============================================================================
+// Event
+//=============================================================================
+
+function Event(refDate) {
   this.phrase = null;
   this.rrule = null;
-  this.refDate = null;
+  this.refDate = refDate;
   this.dtstart = null;
   this.dtend = null;
 }
-ParsedResult.prototype = {
-  toString: function() {
-    var lines = [];
+Event.prototype = {
+  toRFCString: function() {
+    var value = '';
     if (this.dtstart) {
-      lines.push('DTSTART:' + formatRFC('dtstart', this.dtstart, this.refDate));
+      value += 'DTSTART:' + formatRFC('dtstart', this.dtstart, this.refDate) + '\n';
       if (this.dtend) {
-        lines.push('DTEND:' + formatRFC('dtstart', this.dtend, this.refDate));
+        value += 'DTEND:' + formatRFC('dtstart', this.dtend, this.refDate) + '\n';
       }
     }
     if (this.rrule) {
-      lines.push('RRULE:' + this.rrule.toString());
+      var rfcRRule = this.rrule.toString();
+      value += rfcRRule.replace(/(;DTSTART=[^;]*)|(DTSTART=[^;]*;?)/, '');
     }
-    return lines.join('\n');
-  }
-};
+    return value;
+  },
 
+  componentToRFCString: function(property) {
+    return formatRFC(property, this[property], this.refDate); 
+  },
+
+  toString: function() {
+    if (this.rrule) {
+      return this.rrule.toText();
+    } else {
+      return this.dtstart.toString();
+    }
+  },
+};
 
 // TODO tests fail with refDate of midnight
 function parse(phrase, opts) {
@@ -496,14 +538,14 @@ function parse(phrase, opts) {
   };
   opts = extend(defaults, opts);
   var unparsed;
-  var result = new ParsedResult();
+  var result = new Event(opts.refDate);
   if (!phrase) {
     return result;
   }
 
   result.opts = opts;
   result.phrase = unparsed = normalize(phrase);
-  result.rrule = new RRule({refDate: opts.refDate});
+  result.rrule = new RRule();
 
   unparsed = parseStartAndEnd(unparsed, result);
 
@@ -523,6 +565,22 @@ function parse(phrase, opts) {
     var match = RE_AT_TIME.exec(unparsed);
     if (match) {
       parseRecurringTime(match[0], result);
+    }
+    // sort by* options
+    var sortFunc = function(a, b) {
+      if (key === 'byweekday') {
+        return a.weekday - b.weekday;
+      } else {
+        return a - b;
+      }
+    };
+    for (var key in result.rrule.options) {
+      if (key.match(/^by[a-z]+/)) {
+        var value = result.rrule[key];
+        if (value instanceof Array && value.length > 1) {
+          result.rrule[key] = value.slice().sort(sortFunc);
+        }
+      }
     }
   } else {
     // no recurrence, try just date/time
@@ -559,8 +617,8 @@ function parseStartAndEnd(phrase, result) {
     // support, eg: "daily from 2pm to 5pm"
     // We need to know freq, so we do this in a callback
     // * when freq > from/to: from/to acts as recurring duration
-    // * otherwise: from/to acts as the rrule bounds (rrule.until)
-    onRecurrenceParsed(function(rrule) {
+    // * otherwise: from/to acts as the rrule bounds (rr.until)
+    onRecurrenceParsed(function(rr) {
       var from = parseDate(match[2], result.opts).start;
       var to = parseDate(match[4], result.opts).start;
 
@@ -577,7 +635,7 @@ function parseStartAndEnd(phrase, result) {
       if (!to) {
         return;
       }
-      if (unitsFreq.indexOf(rrule.freq) < max) {
+      if (rr.freq < max) {
         result.dtend = to;
       } else {
         result.rrule.until = to;
@@ -589,6 +647,9 @@ function parseStartAndEnd(phrase, result) {
   return extractEnding(phrase, result);
 }
 
+/**
+ * Parser functions
+ */
 function extractEnding(phrase, result) {
   var match = RE_OTHER_END.exec(phrase);
   if (match) {
@@ -665,12 +726,12 @@ function parseRecurrence(phrase, result) {
     return null;
   }
 
-  var rrule = result.rrule;
+  var rr = result.rrule;
 
   // daily
   if (t.hasType('daily')) {
-    rrule.interval = 1;
-    rrule.freq = 'daily';
+    rr.interval = 1;
+    rr.freq = rrule.DAILY;
     return true;
   }
 
@@ -678,28 +739,40 @@ function parseRecurrence(phrase, result) {
   if (t.hasType('pluralWeekday')) {
     if (t.textContains('weekdays')) {
       // "RRULE:FREQ=WEEKLY;WKST=MO;BYDAY=MO,TU,WE,TH,FR"
-      rrule.interval = 1;
-      rrule.freq = 'weekly';
-      rrule.weekdays = ['MO', 'TU', 'WE', 'TH', 'FR'];
+      rr.interval = 1;
+      rr.freq = rrule.WEEKLY;
+      rr.byweekday = rrule.WEEKDAYS;
     } else if (t.textContains('weekends')) {
-      rrule.interval = 1;
-      rrule.freq = 'weekly';
-      rrule.weekdays = ['SA', 'SU'];
+      rr.interval = 1;
+      rr.freq = rrule.WEEKLY;
+      rr.byweekday = rrule.WEEKENDS;
     } else {
       // a plural weekday can really only mean one
       // of two things, weekly or biweekly
-      rrule.freq = 'weekly';
+      rr.freq = rrule.WEEKLY;
       if (t.textContains('bi') || t.textContains('every other')) {
-        rrule.interval = 2;
+        rr.interval = 2;
       } else {
-        rrule.interval = 1;
+        rr.interval = 1;
       }
-      for (var i=0; i<RE_DOWS.length; i++) {
+      var i;
+      var weekdays = [];
+      for (i=0; i<RE_DOWS.length; i++) {
         if (RE_DOWS[i].test(phrase)) {
-          // this supports "thursdays and fridays"
-          rrule.weekdays.push(weekdayCodes[i]);
+          weekdays.push(rrule.DAYS_OF_WEEK[i]);
         }
       }
+      if (RE_WEEKDAY.test(phrase)) {
+        weekdays = weekdays.concat(rrule.WEEKDAYS);
+      }
+      if (RE_WEEKEND.test(phrase)) {
+        weekdays = weekdays.concat(rrule.WEEKENDS);
+      }
+      // uniqify weekdays
+      weekdays = weekdays.filter(function(value, i, array) {
+        return array.indexOf(value) === i;
+      });
+      rr.byweekday = weekdays;
     }
     return true;
   }
@@ -707,16 +780,12 @@ function parseRecurrence(phrase, result) {
   // recurring phrases
   if (t.hasType('every') || t.hasType('recurringUnit')) {
     if (t.textContains('every other')) {
-      rrule.interval = 2;
+      rr.interval = 2;
     } else {
-      rrule.interval = 1;
+      rr.interval = 1;
     }
 
     t.removeByType('every');
-
-    var ordDowString = function(dow, i) {
-      return i.toString() + dow;
-    };
 
     var n, index = 0;
     while (index < t.length) {
@@ -724,17 +793,16 @@ function parseRecurrence(phrase, result) {
         // we assume a bare number always specifies the interval
         n = getNumber(t.get(index).text);
         if (!isNaN(n)) {
-          rrule.interval = n;
+          rr.interval = n;
         }
       } else if (t.get(index).type === 'unit') {
         // we assume a bare unit (grow up...) always specifies the
         // frequency
-        rrule.freq = getUnitFreq(t.get(index).text);
+        rr.freq = getUnitFreq(t.get(index).text);
       } else if (t.get(index).type === 'ordinal') {
         var ords = [getOrdinalIndex(t.get(index).text)];
 
-        // grab all iterated ordinals (e.g. 1st, 3rd and 4th of
-        // november)
+        // grab all iterated ordinals (e.g. 1st, 3rd and 4th of november)
         while (index + 1 < t.length && t.get(index + 1).type === 'ordinal') {
           ords.push(getOrdinalIndex(t.get(index + 1).text));
           index += 1;
@@ -742,21 +810,22 @@ function parseRecurrence(phrase, result) {
 
         if (index + 1 < t.length && t.get(index + 1).type === 'weekday') {
           // "first wednesday of/in ..."
-          var dow = getDaysOfWeek(t.get(index + 1).text)[0];
-          var dowOrds = ords.map(ordDowString.bind(this, dow));
-          rrule.ordinalWeekdays = rrule.ordinalWeekdays.concat(dowOrds);
+          var dayOfWeek = getDaysOfWeek(t.get(index + 1).text)[0];
+          for (n=0; n<ords.length; n++) {
+            rr.byweekday.push(dayOfWeek.nth(ords[n])); 
+          }
           index += 1;
           if (index >= t.length) {
             break;
           }
         } else if (index + 1 < t.length && t.get(index + 1).type === 'unit') {
           // "first of the month/year"
-          rrule.freq = getUnitFreq(t.get(index + 1).text);
-          if (rrule.freq === 'monthly') {
-            rrule.bymonthday = rrule.bymonthday.concat(ords.map(String));
+          rr.freq = getUnitFreq(t.get(index + 1).text);
+          if (rr.freq === rrule.MONTHLY) {
+            rr.bymonthday = rr.bymonthday.concat(ords);
           }
-          if (rrule.freq === 'yearly') {
-            rrule.byearday = rrule.byyearday.concat(ords.map(String));
+          if (rr.freq === rrule.YEARLY) {
+            rr.byearday = rr.byyearday.concat(ords);
           }
           index += 1;
           if (index >= t.length) {
@@ -766,39 +835,43 @@ function parseRecurrence(phrase, result) {
       } else if (t.get(index).type === 'weekday') {
         // if we have a day of week, we can assume the frequency is
         // weekly if it hasnt been set yet.
-        if (!rrule.freq) {
-          rrule.freq = 'weekly';
+        if (!rr.freq) {
+          rr.freq = rrule.WEEKLY;
         }
         var daysOfWeek = getDaysOfWeek(t.get(index).text);
-        rrule.weekdays = rrule.weekdays.concat(daysOfWeek);
+        if (!rr.byweekday) {
+          rr.byweekday = [];
+        }
+        rr.byweekday = rr.byweekday.concat(daysOfWeek);
       } else if (t.get(index).type === 'month') {
         // if we have a month we assume frequency is yearly if it hasnt
         // been set.
-        if (!rrule.freq) {
-          rrule.freq = 'yearly';
+        if (!rr.freq) {
+          rr.freq = rrule.YEARLY;
         }
-        rrule.bymonth.push((getMonth(t.get(index).text)).toString());
+        rr.bymonth.push(getMonth(t.get(index).text));
         // TODO: should iterate this ordinal as well...
         if (index + 1 < t.length && t.get(index + 1).type === 'ordinal') {
-          var oidx = getOrdinalIndex(t.get(index + 1).text).toString();
-          rrule.bymonthday.push(oidx);
+          var oidx = getOrdinalIndex(t.get(index + 1).text);
+          rr.bymonthday.push(oidx);
         }
       }
       index += 1;
     }
+
+    // sort by* values
     return true;
   }
   // No recurring match, return false
   return false;
 }
 
-return {
-  parse: parse,
-  formatRFC: formatRFC,
-  ParsedResult: ParsedResult,
-  RRule: RRule
-};
+rrule.parse = parse;
+rrule.Event = Event;
+rrule.RRule = RRule;
 
-})();
+return rrule;
+
+})(RRule);
 
 // vim: tw=79
