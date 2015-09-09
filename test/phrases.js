@@ -346,6 +346,51 @@ var phrases = [
     }
   ], 
   [
+    'every day at 3:20pm',
+    {
+      'byminute': [20], 
+      'freq': rrule.DAILY, 
+      'byhour': [15], 
+      'interval': 1
+    }
+  ],
+  [
+    'at 3:20pm every day',
+    {
+      'byminute': [20], 
+      'freq': rrule.DAILY, 
+      'byhour': [15], 
+      'interval': 1
+    }
+  ],
+  [
+    'at 10 and 2pm daily',
+    {
+      'byminute': [0, 0], 
+      'freq': rrule.DAILY, 
+      'byhour': [10, 14], 
+      'interval': 1
+    }
+  ],
+  [
+    'at 10 and 2pm every day',
+    {
+      'byminute': [0, 0], 
+      'freq': rrule.DAILY, 
+      'byhour': [10, 14], 
+      'interval': 1
+    }
+  ],
+  [
+    'every day at 10 and 2pm',
+    {
+      'byminute': [0, 0], 
+      'freq': rrule.DAILY, 
+      'byhour': [10, 14], 
+      'interval': 1
+    }
+  ],
+  [
     'march 3rd', 
     {'dtstart': '20150303'}
   ], 

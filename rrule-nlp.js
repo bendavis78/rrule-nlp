@@ -88,7 +88,7 @@ var RE_NUMBER = new RegExp('(' + numbers.join('|') + ')$|(\\d+)$');
 
 var RE_EVERY = new RegExp('(every|each|once)$');
 var RE_THROUGH = new RegExp('(through|thru)$');
-var RE_DAILY = new RegExp('daily|everyday');
+var RE_DAILY = new RegExp('daily|every_?day');
 var RE_RECURRING_UNIT = new RegExp('weekly|monthly|yearly');
 
 var RE_AT_TIME = new RegExp('at\\s(.+)'); 
@@ -114,6 +114,11 @@ var RE_FROM_NOW = new RegExp('(.+) from now');
 var RE_HRS_MINUTES = new RegExp('(.+) hours(?: and)? (.+) minutes');
 
 var RE_WKDAY_TYPE = new RegExp(RE_DOW.source + '|(weekday)|(weekend)');
+
+//patterns that should be parsed as a single token (replaces spaces w/ _)
+var COMBINE = [
+  new RegExp('every\\s+day', 'g')
+];
 
 var RECUR_TYPES = {
   daily: RE_DAILY,
@@ -208,6 +213,10 @@ dateParser.parsers.push(fromNowParser);
 //=============================================================================
 // Utility Functions
 //=============================================================================
+
+function replaceAt(text, start, length, replace) {
+  return text.substr(0, start) + replace + text.substr(start + replace.length);
+}
 
 function getNumber(s) {
   if (isNaN(parseInt(s))) {
@@ -352,9 +361,17 @@ Token.prototype.toString = function() {
 function Tokenizer(text) {
   this._text = text;
   this._tokens = [];
-  var type;
-  var tokens = text.split(' ');
-  for (var i=0; i<tokens.length; i++) {
+  var i, m, type, tokens;
+  
+  for (i=0; i<COMBINE.length; i++) {
+    while ((m = COMBINE[i].exec(text)) !== null) {
+      // TODO this only works with regexps with one match group
+      text = replaceAt(text, m.index, m[0].length, m[0].replace(' ', '_'));
+    }
+  }
+  
+  tokens = text.split(' ');
+  for (i=0; i<tokens.length; i++) {
     for (type in TOKEN_TYPES) {
       if (TOKEN_TYPES[type].test(tokens[i])) {
         this._tokens.push(new Token(this, tokens[i], type));
@@ -363,6 +380,7 @@ function Tokenizer(text) {
     }
   }
 } 
+
 Tokenizer.prototype = {
   filterTypes: function(types) {
     var newTokens = [];
@@ -578,9 +596,10 @@ Event.prototype = {
         return this.phrase;
       }
       return text;
-    } else {
+    } else if (this.dtstart) {
       return this.dtstart.date().toString();
     }
+    return '';
   },
 };
 
@@ -924,6 +943,7 @@ function parseRecurrence(phrase, result) {
 rrule.parse = parse;
 rrule.Event = Event;
 rrule.RRule = RRule;
+rrule.Tokenizer = Tokenizer;
 
 return rrule;
 

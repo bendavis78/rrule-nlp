@@ -22,7 +22,7 @@
       errors.push(e);
     }
     if (errors.length) {
-      console.groupCollapsed('%cFailed: ' + phrase, 'color: red');
+      console.group('%cFailed: ' + phrase, 'color: red');
       for (var e=0; e<errors.length; e++) {
         if (errors[e].key) {
           console.group(errors[e].key);
@@ -38,7 +38,7 @@
       }
       console.groupEnd();
     } else {
-      console.group('%cSuccess: ' + phrase, 'color: green');
+      console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
       console.log('%c' + rfcString, 'color: blue');
       console.log('%c' + verbose, 'color: #333');
       //console.log('Result: ', result);
