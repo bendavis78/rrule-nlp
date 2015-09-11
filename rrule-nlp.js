@@ -87,9 +87,12 @@ var numbers = [
 var RE_NUMBER = new RegExp('(' + numbers.join('|') + ')$|(\\d+)$');
 
 var RE_EVERY = new RegExp('(every|each|once)$');
+var RE_EVERY_OTHER = new RegExp('every_other');
 var RE_THROUGH = new RegExp('(through|thru)$');
-var RE_DAILY = new RegExp('daily|every_?day');
-var RE_RECURRING_UNIT = new RegExp('weekly|monthly|yearly');
+var RE_DAILY = new RegExp('(daily|every_?day|each_?day)');
+var RE_RECURRING_UNIT = new RegExp('(bi)?(weekly|monthly|yearly)');
+
+// TODO support biweekly, bimonthly, semianually, etc...
 
 var RE_AT_TIME = new RegExp('at\\s(.+)'); 
 var RE_STARTING = new RegExp('start(?:s|ing)?');
@@ -99,15 +102,14 @@ var RE_START = new RegExp('(' + RE_STARTING.source + ')\\s(.*)');
 var RE_EVENT = new RegExp(
   '((?:every|each|\\bon\\b|repeat|' + RE_DAILY.source + '|' + 
   RE_PLURAL_WKDAY.source + ')(?:s|ing)?(.*))');
-var RE_END = new RegExp(RE_ENDING.source + '(.*)');
+var RE_END = new RegExp('(' + RE_ENDING.source + ')(.*)');
 var RE_START_EVENT = new RegExp(RE_START.source + '\\s' + RE_EVENT.source);
 var RE_EVENT_START = new RegExp(RE_EVENT.source + '\\s' + RE_START.source);
 var RE_FROM_TO = new RegExp(
-  '(.*)from(.*)(to|through|thru)(.*)');
-//var RE_START_END = new RegExp(RE_START.source + '\\s' + RE_END.source);
+  '(.*)(from)(.*)(to|through|thru)(.*)');
 var RE_OTHER_END = new RegExp('(.*)\\s' + RE_END.source);
 var RE_SEP = new RegExp(
-  '(from|to|through|thru|on|at|of|in|a|an|the|and|o|both)$');
+  '^(from|to|through|thru|on|at|of|in|a|an|the|and|o|both)$');
 var RE_AMBIGMOD = new RegExp('(this|next|last)$');
 var RE_OTHER = new RegExp('other|alternate');
 var RE_FROM_NOW = new RegExp('(.+) from now');
@@ -117,12 +119,14 @@ var RE_WKDAY_TYPE = new RegExp(RE_DOW.source + '|(weekday)|(weekend)');
 
 //patterns that should be parsed as a single token (replaces spaces w/ _)
 var COMBINE = [
-  new RegExp('every\\s+day', 'g')
+  new RegExp('(each|every)\\s+day', 'g'),
+  new RegExp('every\\s+other', 'g')
 ];
 
 var RECUR_TYPES = {
   daily: RE_DAILY,
   every: RE_EVERY,
+  everyOther: RE_EVERY_OTHER,
   through: RE_THROUGH,
   unit: RE_UNITS,
   recurringUnit: RE_RECURRING_UNIT,
@@ -216,6 +220,10 @@ dateParser.parsers.push(fromNowParser);
 
 function replaceAt(text, start, length, replace) {
   return text.substr(0, start) + replace + text.substr(start + replace.length);
+}
+
+function groupIndex(match, group) {
+  return match.index + match[0].indexOf(match[group]);
 }
 
 function getNumber(s) {
@@ -343,73 +351,105 @@ function formatRFC(property, parsed, refDate) {
 // Token
 //=============================================================================
 
-function Token(tokenizer, text, type) {
-  this.tokenizer = tokenizer;
+function Token(text, phraseIndex, match, type) {
+  this.index = null;
+  this.match = match;
+  this.phraseIndex = phraseIndex;
   this.text = text;
   this.type = type;
 }
 
-Token.prototype.toString = function() {
-  return '<Token "' + this.text + '": ' + this.type + '>';
+Token.prototype = {
+  toString: function() {
+    return '<Token "' + this.text + '": ' + this.type + '>';
+  },
+  contains: function(s) {
+    return this.text.indexOf(s) !== -1;
+  }
 };
 
 
 //=============================================================================
-// Tokenizer
+// TokenList
 //=============================================================================
 
-function Tokenizer(text) {
-  this._text = text;
-  this._tokens = [];
-  var i, m, type, tokens;
-  
-  for (i=0; i<COMBINE.length; i++) {
-    while ((m = COMBINE[i].exec(text)) !== null) {
-      // TODO this only works with regexps with one match group
-      text = replaceAt(text, m.index, m[0].length, m[0].replace(' ', '_'));
-    }
+function getArgs(args) {
+  if (args.length === 1 && args[0] instanceof Array) {
+    return args[0];
   }
-  
-  tokens = text.split(' ');
-  for (i=0; i<tokens.length; i++) {
-    for (type in TOKEN_TYPES) {
-      if (TOKEN_TYPES[type].test(tokens[i])) {
-        this._tokens.push(new Token(this, tokens[i], type));
+  return Array.prototype.slice.apply(args);
+}
+function TokenList(tokens) {
+  this._tokens = tokens || [];
+  this._iter = -1;
+  this.push = Array.prototype.push.bind(this._tokens);
+}
+TokenList.prototype = {
+  get: function(index) {
+    index = index || 0;
+    return this._tokens[index];
+  },
+  next: function(incr) {
+    var idx = this._iter + 1;
+    if (incr !== false) {
+      this._iter = idx;
+    }
+    return this._tokens[idx];
+  },
+  before: function(token) {
+    var tokens = [];
+    for (var i=0; i<this._tokens.length; i++) {
+      if (this._tokens[i].phraseIndex < token.phraseIndex) {
+        tokens.push(this._tokens[i]);
+      } else {
         break;
       }
     }
-  }
-} 
-
-Tokenizer.prototype = {
-  filterTypes: function(types) {
-    var newTokens = [];
-    var token;
-    for (var i=0; i<this._tokens.length; i++) {
-      token = this._tokens[i];
-      if (types.indexOf(token.type) !== -1) {
-        newTokens.push(token);
+    return new TokenList(tokens);
+  },
+  after: function(token) {
+    var tokens = this._tokens;
+    var index;
+    for (var i=0; i<tokens.length; i++) {
+      if (tokens[i].index > token.index) {
+        index = i;
+        break;
       }
     }
-    this._tokens = newTokens;
-  },
-  hasType: function(type) {
-    return this.types.indexOf(type) !== -1;
-  },
-  textContains: function(s) {
-    return this._text.indexOf(s) !== -1;
-  },
-  get: function(index) {
-    return this._tokens[index];
-  },
-  remove: function(index) {
-    this._tokens.splice(index, 1);
-  },
-  removeByType: function(type) {
-    var i = this.types.indexOf(type);
-    if (i !== -1) {
-      this.remove(i);
+    if (index) {
+      tokens = tokens.slice(index, tokens.length);
     }
+    return new TokenList(tokens);
+  },
+  withType: function() {
+    var types = getArgs(arguments);
+    var tokens = this._tokens.filter(function(token) {
+      return types.indexOf(token.type) !== -1;
+    });
+    return new TokenList(tokens);
+  },
+  withoutType: function() {
+    var types = getArgs(arguments);
+    var tokens = this._tokens.filter(function(token) {
+      return types.indexOf(token.type) === -1;
+    });
+    return new TokenList(tokens);
+  },
+  hasType: function() {
+    return !!this.findFirst(getArgs(arguments));
+  },
+  findFirst: function() {
+    var types = getArgs(arguments);
+    for (var i=0; i < this._tokens.length; i++) {
+      if (types.indexOf(this._tokens[i].type) !== -1) {
+        return this._tokens[i];
+      }
+    }
+    return null;
+  },
+  add: function(text, phraseIndex, match, type) {
+    var len = this._tokens.push(new Token(text, phraseIndex, match, type));
+    this._tokens[len - 1].index = len - 1;
   },
   get types() {
     if (!this._types) {
@@ -427,6 +467,37 @@ Tokenizer.prototype = {
     return this._tokens.map(String).join(', ');
   }
 };
+
+
+function tokenize(text) {
+  tokens = new TokenList();
+  var i, m, type, tokens;
+  
+  // handle words that should be parsed as one token
+  for (i=0; i<COMBINE.length; i++) {
+    while ((m = COMBINE[i].exec(text)) !== null) {
+      // TODO this only works with regexps with one match group
+      text = replaceAt(text, m.index, m[0].length, m[0].replace(' ', '_'));
+    }
+  }
+
+  var rawToken, rawTokens = text.split(' ');
+  var phraseIndex = 0;
+  for (i=0; i<rawTokens.length; i++) {
+    rawToken = rawTokens[i];
+    for (type in TOKEN_TYPES) {
+      var match = TOKEN_TYPES[type].exec(rawToken);
+      if (match) {
+        tokens.add(rawToken, phraseIndex, match, type);
+        break;
+      }
+    }
+    // plus 1 for the space
+    phraseIndex += (rawToken.length + 1);
+  }
+
+  return tokens;
+} 
 
 //=============================================================================
 // RRule
@@ -568,6 +639,7 @@ function Event(refDate) {
   this.refDate = refDate;
   this.dtstart = null;
   this.dtend = null;
+  this.parsed = [];
 }
 Event.prototype = {
   toRFCString: function() {
@@ -603,42 +675,49 @@ Event.prototype = {
   },
 };
 
-// TODO tests fail with refDate of midnight
+Event.prototype._addResult = function (result, offset) {
+  this.parsed.push({
+    index: (result.phraseIndex || result.index) + (offset || 0),
+    text: result[0] || result.text
+  });
+};
+
 function parse(phrase, opts) {
   opts = opts || {};
   var defaults = {
     preferAMStart: 8,
     preferFuture: false
   };
+
   opts = extend(defaults, opts);
   var unparsed;
-  var result = new Event(opts.refDate);
+  var event = new Event(opts.refDate);
   if (!phrase) {
-    return result;
+    return event;
   }
 
-  result.opts = opts;
-  result.phrase = unparsed = normalize(phrase);
-  result.rrule = new RRule();
+  event.opts = opts;
+  event.phrase = normalize(phrase);
+  event.rrule = new RRule();
 
-  unparsed = parseStartAndEnd(unparsed, result);
+  unparsed = parseStartAndEnd(event.phrase, event);
 
-  if (!unparsed) {
-    result.rrule = null;
-    return result;
+  if (!(unparsed && unparsed.text)) {
+    event.rrule = null;
+    return event;
   }
 
-  var recurrence = parseRecurrence(unparsed, result);
-  fireOnRecurrenceParsed(result.rrule);
+  var recurrence = parseRecurrence(unparsed.text, event, unparsed.index);
+  fireOnRecurrenceParsed(event.rrule);
   if (!recurrence) {
-    result.rrule = null;
+    event.rrule = null;
   }
 
-  if (result.rrule) {
+  if (event.rrule) {
     // get time/times if its obvious
-    var match = RE_AT_TIME.exec(unparsed);
+    var match = RE_AT_TIME.exec(unparsed.text);
     if (match) {
-      parseRecurringTime(match[0], result);
+      parseRecurringTime(match[0], event, unparsed.index + match.index);
     }
     // sort by* options
     var sortFunc = function(a, b) {
@@ -648,42 +727,51 @@ function parse(phrase, opts) {
         return a - b;
       }
     };
-    for (var key in result.rrule.options) {
+    for (var key in event.rrule.options) {
       if (key.match(/^by[a-z]+/)) {
-        var value = result.rrule[key];
+        var value = event.rrule[key];
         if (value instanceof Array && value.length > 1) {
-          result.rrule[key] = value.slice().sort(sortFunc);
+          event.rrule[key] = value.slice().sort(sortFunc);
         }
       }
     }
   } else {
     // no recurrence, try just date/time
-    var parsed = parseDate(unparsed, opts);
+    var parsed = parseDate(unparsed.text, opts);
     if (parsed.start) {
-      result.dtstart = parsed.start;
+      event.dtstart = parsed.start;
       if (parsed.end) {
-        result.dtend = parsed.end;
+        event.dtend = parsed.end;
       }
+      event._addResult(parsed, unparsed.index);
     }
   }
 
-  return result;
+  return event;
 }
 
-function parseStartAndEnd(phrase, result) {
-  var start, match;
+function parseStartAndEnd(phrase, event) {
+  var start, match, parsedDate;
 
   match = RE_START_EVENT.exec(phrase);
   if (match) {
-    result.dtstart = parseDate(match[2], result.opts).start;
-    return extractEnding(match[3], result);
+    parsedDate = parseDate(match[2], event.opts);
+    event.dtstart = parsedDate.start;
+    event._addResult(parsedDate, groupIndex(match, 2));
+    return extractEnding(match[3], event, groupIndex(match, 3));
   }
 
   match = RE_EVENT_START.exec(phrase);
   if (match) {
-    start = extractEnding(match[5], result);
-    result.dtstart = parseDate(start, result.opts).start;
-    return match[1];
+    start = extractEnding(match[6], event, groupIndex(match, 6));
+    parsedDate = parseDate(start.text, event.opts);
+    event.dtstart = parsedDate.start;
+    event._addResult({text: match[5], index: groupIndex(match, 5)});
+    event._addResult(start);
+    return {
+      text: match[1],
+      index: groupIndex(match, 1)
+    };
   }
 
   match = RE_FROM_TO.exec(phrase);
@@ -693,11 +781,14 @@ function parseStartAndEnd(phrase, result) {
     // * when freq > from/to: from/to acts as recurring duration
     // * otherwise: from/to acts as the rrule bounds (rr.until)
     onRecurrenceParsed(function(rr) {
-      var from = parseDate(match[2], result.opts).start;
-      var to = parseDate(match[4], result.opts).start;
+      // TODO:RANGE
+      var from = parseDate(match[3], event.opts);
+      var fromIdx = groupIndex(match, 3);
+      var to = parseDate(match[5], event.opts);
+      var toIdx = groupIndex(match, 5);
 
       // We assume from/to have same resolution (eg, hour-to-hour, day-to-day)
-      var knownValues = from.knownValues;
+      var knownValues = from.start.knownValues;
       var unit, idx, max = -1;
       for (unit in knownValues) {
         idx = units.indexOf(unit); 
@@ -705,48 +796,66 @@ function parseStartAndEnd(phrase, result) {
           max = idx;
         }
       }
-      result.dtstart = from;
-      if (!to) {
+      event.dtstart = from.start;
+      event._addResult({text: match[2], index: groupIndex(match, 2)});
+      event._addResult(from, fromIdx);
+      if (!to.start) {
         return;
       }
+      event._addResult({text: match[4], index: groupIndex(match, 4)});
+      event._addResult(to, toIdx);
       if (rr.freq < max) {
-        result.dtend = to;
+        event.dtend = to.start;
       } else {
-        result.rrule.until = to;
+        event.rrule.until = to.start;
       }
     });
-    return match[1];
+    return {
+      text: match[1],
+      index: groupIndex(match, 1)
+    };
   }
 
-  return extractEnding(phrase, result);
+  return extractEnding(phrase, event);
 }
 
 /**
  * Parser functions
  */
-function extractEnding(phrase, result) {
+function extractEnding(phrase, event, offset) {
+  offset = offset || 0;
   var match = RE_OTHER_END.exec(phrase);
   if (match) {
-    result.rrule.until = parseDate(match[2], result.opts).start;
-    return match[1];
+    event.rrule.until = parseDate(match[3], event.opts).start;
+    event._addResult({text: match[2], index: offset + groupIndex(match, 2)});
+    event._addResult({text: match[3], index: offset + groupIndex(match, 3)});
+    return {
+      text: match[1],
+      index: offset + groupIndex(match, 1)
+    };
   }
-  return phrase;
+  return {
+    text: phrase,
+    index: offset
+  };
 }
 
-function parseRecurringTime(phrase, result) {
+function parseRecurringTime(phrase, event, offset) {
   var dateResult;
-  var parsedTime = dateParser.parse(phrase, result.opts.refDate);
+  var parsedTime = dateParser.parse(phrase, event.opts.refDate);
   for (var i=0; i<parsedTime.length; i++) {
     if (!parsedTime[i].start) {
       continue;
     }
 
-    dateResult = refineDate(parsedTime[i].start, result.opts);
+    dateResult = refineDate(parsedTime[i].start, event.opts);
     if (dateResult.isCertain('hour')) {
-      result.rrule.byhour.push(dateResult.get('hour'));
+      event._addResult(parsedTime[i], offset);
+      event.rrule.byhour.push(dateResult.get('hour'));
     }
     if (dateResult.isCertain('minute')) {
-      result.rrule.byminute.push(dateResult.get('minute'));
+      event._addResult(parsedTime[i], offset);
+      event.rrule.byminute.push(dateResult.get('minute'));
     }
   }
 }
@@ -792,158 +901,172 @@ function fireOnRecurrenceParsed(rrule) {
   }
 }
 
-function parseRecurrence(phrase, result) {
-  var t = new Tokenizer(phrase);
-  t.filterTypes(Object.keys(RECUR_TYPES));
+function parseRecurrence(phrase, event, offset) {
+  var tokens = tokenize(phrase).withType(Object.keys(RECUR_TYPES));
 
-  if (!t.length) {
+  if (!tokens.length) {
     return null;
   }
 
-  var rr = result.rrule;
+  var rr = event.rrule;
 
   // daily
-  if (t.hasType('daily')) {
+  var daily = tokens.withType('daily').get();
+  if (daily) {
     rr.interval = 1;
     rr.freq = rrule.DAILY;
+    event._addResult(daily, offset);
     return true;
   }
 
+  var hasRecurring = false;
+
   // explicit weekdays
-  if (t.hasType('pluralWeekday')) {
-    if (t.textContains('weekdays')) {
-      // "RRULE:FREQ=WEEKLY;WKST=MO;BYDAY=MO,TU,WE,TH,FR"
-      rr.interval = 1;
-      rr.freq = rrule.WEEKLY;
-      rr.byweekday = rrule.WEEKDAYS;
-    } else if (t.textContains('weekends')) {
-      rr.interval = 1;
-      rr.freq = rrule.WEEKLY;
-      rr.byweekday = rrule.WEEKENDS;
-    } else {
-      // a plural weekday can really only mean one
-      // of two things, weekly or biweekly
-      rr.freq = rrule.WEEKLY;
-      if (t.textContains('bi') || t.textContains('every other')) {
+  var pluralWeekdays = tokens.withType('pluralWeekday');
+  var weekdays, otherWeekdays, pluralWeekday;
+
+  pluralWeekday = pluralWeekdays.next();
+  if (pluralWeekday) {
+    rr.interval = 1;
+    rr.freq = rrule.WEEKLY;
+    
+    weekdays = getDaysOfWeek(pluralWeekday.text);
+
+    event._addResult(pluralWeekday, offset);
+    if (weekdays.length == 1) {
+      // token is not "weekends" or "weekdays" (eg, thursdays, fridays)
+      
+      // check for "every other"
+      var before = tokens.before(pluralWeekday);
+      if (pluralWeekday.contains('bi') || before.hasType('everyOther')) {
         rr.interval = 2;
       } else {
         rr.interval = 1;
       }
-      var i;
-      var weekdays = [];
-      for (i=0; i<RE_DOWS.length; i++) {
-        if (RE_DOWS[i].test(phrase)) {
-          weekdays.push(rrule.DAYS_OF_WEEK[i]);
+
+      // check for additional weekdays
+      while ((pluralWeekday = pluralWeekdays.next())) {
+        otherWeekdays = getDaysOfWeek(pluralWeekday.text);
+        if (otherWeekdays.length == 1) {
+          event._addResult(pluralWeekday, offset);
+          weekdays = weekdays.concat(otherWeekdays);
         }
       }
-      if (RE_WEEKDAY.test(phrase)) {
-        weekdays = weekdays.concat(rrule.WEEKDAYS);
-      }
-      if (RE_WEEKEND.test(phrase)) {
-        weekdays = weekdays.concat(rrule.WEEKENDS);
-      }
+
       // uniqify weekdays
       weekdays = weekdays.filter(function(value, i, array) {
         return array.indexOf(value) === i;
       });
-      rr.byweekday = weekdays;
     }
-    return true;
+    
+    rr.byweekday = weekdays;
+    hasRecurring = true;
+    
   }
 
   // recurring phrases
-  if (t.hasType('every') || t.hasType('recurringUnit')) {
-    if (t.textContains('every other')) {
+  var n, token;
+  var recurring = tokens.withType('every', 'everyOther', 'recurringUnit').next();
+  if (recurring) {
+    if (recurring.type == 'everyOther') {
       rr.interval = 2;
     } else {
       rr.interval = 1;
     }
 
-    t.removeByType('every');
+    event._addResult(recurring, offset);
+    tokens = tokens.withoutType('every', 'everyOther', 'recurringUnit');
 
-    var n, index = 0;
-    while (index < t.length) {
-      if (t.get(index).type === 'number') {
-        // we assume a bare number always specifies the interval
-        n = getNumber(t.get(index).text);
+    while ((token = tokens.next())) {
+      if (token.type === 'number') {
+        // we assume a bare number when "every" is present always specifies the interval
+        n = getNumber(token.text);
         if (!isNaN(n)) {
           rr.interval = n;
+          event._addResult(token, offset);
         }
-      } else if (t.get(index).type === 'unit') {
-        // we assume a bare unit (grow up...) always specifies the
-        // frequency
-        rr.freq = getUnitFreq(t.get(index).text);
-      } else if (t.get(index).type === 'ordinal') {
-        var ords = [getOrdinalIndex(t.get(index).text)];
+      } else if (token.type === 'unit') {
+        // we assume a bare unit (grow up...) always specifies the frequency
+        rr.freq = getUnitFreq(token.text);
+        event._addResult(token, offset);
+      } else if (token.type === 'ordinal') {
+        var ords = [token];
 
         // grab all iterated ordinals (e.g. 1st, 3rd and 4th of november)
-        while (index + 1 < t.length && t.get(index + 1).type === 'ordinal') {
-          ords.push(getOrdinalIndex(t.get(index + 1).text));
-          index += 1;
+        while ((token = tokens.next()) && token.type == 'ordinal') {
+          ords.push(token);
         }
 
-        if (index + 1 < t.length && t.get(index + 1).type === 'weekday') {
+        if (!token) {
+          break;
+        }
+
+        if (token.type === 'weekday') {
           // "first wednesday of/in ..."
-          var dayOfWeek = getDaysOfWeek(t.get(index + 1).text)[0];
+          var dayOfWeek = getDaysOfWeek(token.text)[0];
           for (n=0; n<ords.length; n++) {
-            rr.byweekday.push(dayOfWeek.nth(ords[n])); 
+            rr.byweekday.push(dayOfWeek.nth(getOrdinalIndex(ords[n].text))); 
+            event._addResult(ords[n], offset);
           }
-          index += 1;
-          if (index >= t.length) {
-            break;
-          }
-        } else if (index + 1 < t.length && t.get(index + 1).type === 'unit') {
+          event._addResult(token, offset);
+        } else if (token.type === 'unit') {
           // "first of the month/year"
-          rr.freq = getUnitFreq(t.get(index + 1).text);
+          rr.freq = getUnitFreq(token.text);
+          event._addResult(token, offset);
           if (rr.freq === rrule.MONTHLY) {
-            rr.bymonthday = rr.bymonthday.concat(ords);
+            for (n=0; n<ords.length; n++) {
+              rr.bymonthday.push(getOrdinalIndex(ords[n].text));
+              event._addResult(ords[n], offset);
+            }
           }
           if (rr.freq === rrule.YEARLY) {
-            rr.byearday = rr.byyearday.concat(ords);
-          }
-          index += 1;
-          if (index >= t.length) {
-            break;
+            for (n=0; n<ords.length; n++) {
+              rr.byyearday.push(getOrdinalIndex(ords[n].text));
+              event._addResult(ords[n], offset);
+            }
           }
         }
-      } else if (t.get(index).type === 'weekday') {
+      } else if (!rr.byweeday && token.type === 'weekday') {
         // if we have a day of week, we can assume the frequency is
         // weekly if it hasnt been set yet.
         if (!rr.freq) {
           rr.freq = rrule.WEEKLY;
         }
-        var daysOfWeek = getDaysOfWeek(t.get(index).text);
+        var daysOfWeek = getDaysOfWeek(token.text);
         if (!rr.byweekday) {
           rr.byweekday = [];
         }
         rr.byweekday = rr.byweekday.concat(daysOfWeek);
-      } else if (t.get(index).type === 'month') {
+        event._addResult(token, offset);
+      } else if (token.type === 'month') {
         // if we have a month we assume frequency is yearly if it hasnt
         // been set.
         if (!rr.freq) {
           rr.freq = rrule.YEARLY;
         }
-        rr.bymonth.push(getMonth(t.get(index).text));
+        rr.bymonth.push(getMonth(token.text));
+        event._addResult(token, offset);
         // TODO: should iterate this ordinal as well...
-        if (index + 1 < t.length && t.get(index + 1).type === 'ordinal') {
-          var oidx = getOrdinalIndex(t.get(index + 1).text);
+        token = tokens.next();
+        if (!token) {
+          break;
+        }
+        if (token.type === 'ordinal') {
+          var oidx = getOrdinalIndex(token.text);
           rr.bymonthday.push(oidx);
+          event._addResult(token, offset);
         }
       }
-      index += 1;
     }
 
-    // sort by* values
     return true;
   }
-  // No recurring match, return false
-  return false;
+
+  return hasRecurring;
 }
 
 rrule.parse = parse;
 rrule.Event = Event;
-rrule.RRule = RRule;
-rrule.Tokenizer = Tokenizer;
 
 return rrule;
 

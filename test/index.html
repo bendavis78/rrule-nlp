@@ -2,12 +2,14 @@
 <script src="../bower_components/moment/min/moment.min.js"></script>
 <script src="../bower_components/rrule/lib/rrule.js"></script>
 <script src="../bower_components/rrule/lib/nlp.js"></script>
+<script src="../bower_components/nlp_compromise/client_side/nlp.min.js"></script>
 
 <script src="../rrule-nlp.js"></script>
 <script src="phrases.js"></script>
+<script src="full-phrases.js"></script>
 
 <script>
-  /* globals rrule: false, chrono: false */
+  /* globals rrule: false, chrono: false, nlp: false */
   var phrase, expected, result, i, k;
 
   function logResult(errors, result) {
@@ -69,48 +71,118 @@
     preferFuture: true
   };
 
-  for (i=0; i<window.phrases.length; i++) {
-    phrase = window.phrases[i][0];
-    expected = window.phrases[i][1];
-    errors = [];
+  function testPhrases(phrases) {
+    for (i=0; i<phrases.length; i++) {
+      phrase = phrases[i][0];
+      expected = phrases[i][1];
+      errors = [];
 
-    try {
-      result = rrule.parse(phrase, opts);
-      if (!(result instanceof rrule.Event)) {
-        throw new Error('result is not a Event object');
-      }
-    } catch (e) {
-      if (expected !== null) {
-        errors.push(e);
-      }
-      logResult(errors);
-      continue;
-    }
-    if (typeof(expected) === 'object') {
-      for (k in expected) {
-        chkResult = result.rrule || {};
-        if (/dt(start|end)/.test(k)) {
-          chkResult = result;
+      try {
+        result = rrule.parse(phrase, opts);
+        if (!(result instanceof rrule.Event)) {
+          throw new Error('result is not a Event object');
         }
-        chkValue = chkResult[k];
-        if (chkValue instanceof chrono.ParsedComponents) {
-          chkValue = chkResult.componentToRFCString(k);
+      } catch (e) {
+        if (expected !== null) {
+          errors.push(e);
         }
-        if (!cmp(expected[k], chkValue)) {
-          errors.push({key: k, expected: expected[k], result: chkValue});
-        }
+        logResult(errors);
+        continue;
       }
-    } else {
-      errors.push(['TODO: handle ', expected, result]);
-    }
+      if (typeof(expected) === 'object') {
+        for (k in expected) {
+          chkResult = result.rrule || {};
+          if (/dt(start|end)/.test(k)) {
+            chkResult = result;
+          }
+          chkValue = chkResult[k];
+          if (chkValue instanceof chrono.ParsedComponents) {
+            chkValue = chkResult.componentToRFCString(k);
+          }
+          if (!cmp(expected[k], chkValue)) {
+            errors.push({key: k, expected: expected[k], result: chkValue});
+          }
+        }
+      } else {
+        errors.push(['TODO: handle ', expected, result]);
+      }
 
-    logResult(errors, result);
+      logResult(errors, result);
+    }
   }
 
-  for (var i=0; i<window.phrases.length; i++) {
-    phrase = window.phrases[i][0];
-    result = rrule.parse(phrase);
+  function print(s) {
+    // jshint evil: true
+    document.write(s);
   }
+
+  /* exported showPOSTags */
+  function showPOSTags(phrase) {
+    var sentence, token;
+    sentence = nlp.pos(phrase).sentences[0];
+    print('<table><tr>');
+    for (var t=0; t<sentence.tokens.length; t++) {
+      token = sentence.tokens[t];
+      print('<td class="tag-'+token.pos.tag.toLowerCase()+'" title="'+token.pos.name+'">');
+      print('<span class="token">' + token.text + '<br><span class="tag">' + token.pos.tag + '</span></td> ');
+    }
+    print('</tr></table>');
+  }
+
+  function showRanges(phrase) {
+    var event = rrule.parse(phrase);
+    var c, i, start, end, found;
+
+    print('<p>');
+    for (c=0; c<phrase.length; c++) {
+      found = false;
+      for (i=0; i<event.parsed.length; i++) {
+        start = event.parsed[i].index;
+        end = start + event.parsed[i].text.length;
+        if (c >= start && c <= end) {
+          found = true;
+          break;
+        }
+      }
+      print('<span class="' + (found ? 'parsed' : '') + '">' + phrase[c]  + '</span>');
+    }
+    print('</p>');
+  }
+
+  function showPhrases(phrases) {
+    for (var p=0; p<phrases.length; p++) {
+      phrase = phrases[p][0];
+      showRanges(phrase);
+      //showPOSTags(phrase);
+    }
+  }
+
+  //testPhrases(window.phrases);
+  //showPhrases(window.phrases);
+  testPhrases(window.fullPhrases);
+  showPhrases(window.fullPhrases);
 </script>
+
+<style>
+  .sentence {
+    display: flex;
+    flex-display: row;
+  }
+  table {
+    margin: 1em 0;
+    border: 1px solid #ddd;
+    border-left: none;
+  }
+  td {
+    padding: 4px;
+    border-left: 1px solid #ddd;
+  }
+  span {
+    cursor: default;
+  }
+  .parsed {
+    background: #FCE5CD;
+  }
+</style>
 
 <p>See JavaScript console for test results.</p>
