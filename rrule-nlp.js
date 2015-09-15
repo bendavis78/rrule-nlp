@@ -544,7 +544,12 @@ var BaseRRule = RRule;
 function getRRuleDescriptor(opt) {
   if (opt === 'dtstart') {
     return {
-      value: null
+      get: function() {
+        return null;
+      },
+      set: function(value) {
+        this.options[opt] = value;
+      }
     };
   }
   var desc = {
@@ -673,12 +678,21 @@ rrule.WEEKENDS = rrule.DAYS_OF_WEEK.slice(5, 7);
 var Event = function(refDate) {
   this.phrase = null;
   this.rrule = null;
+  this._dtstart = null;
   this.refDate = refDate;
-  this.dtstart = null;
   this.dtend = null;
   this.parsed = [];
 };
 Event.prototype = {
+  get dtstart() {
+    return this._dtstart;
+  },
+  set dtstart(value) {
+    this._dtstart = value;
+    if (this.rrule) {
+      this.rrule.options.dtstart = value;
+    }
+  },
   toRFCString: function() {
     var value = '';
     if (this.dtstart) {
@@ -941,12 +955,21 @@ function parseRecurringTime(phrase, event, offset) {
       return (i * event.rrule.byminute.length) + idx + 1; 
     });
 
-    // This only works if DTSTART is at the first byhour/byminute
+    // This only works if DTSTART is before the first byhour/byminute
+    console.groupCollapsed('setting dtstart');
     if (!event.dtstart) {
       event.dtstart = new Date(event.refDate.getTime());
+      console.log('no dtstart, setting to', event.dtstart.toString());
     }
-    event.dtstart.setHours(event.rrule.byhour[0]);
-    event.dtstart.setMinutes(event.rrule.byminute[0]);
+    var dtstart = new Date(event.dtstart.getTime());
+    dtstart.setHours(event.rrule.byhour[0]);
+    dtstart.setMinutes(event.rrule.byminute[0]);
+    console.log('dtstart should be at least', dtstart.toString());
+    if (dtstart < event.dtstart) {
+      event.dtstart = dtstart;
+      console.log('updated dtstart to', event.dtstart.toString());
+    }
+    console.groupEnd();
   }
 }
 
