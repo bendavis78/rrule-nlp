@@ -1,4 +1,4 @@
-/* exported phrases */
+/* exported fullPhrases */
 /* globals rrule */
 var fullPhrases = [
   [
@@ -197,7 +197,24 @@ var fullPhrases = [
     }
   ], 
   [
-    'remember Dad\'s birthday yearly on the fourth thursday in november', 
+    'get funky on the first and third friday every other month', 
+    {
+      'byweekday': [rrule.FR.nth(1), rrule.FR.nth(3)],
+      'interval': 2, 
+      'freq': rrule.MONTHLY
+    }
+  ], 
+  [
+    'get funky on the first and third friday of november every other year', 
+    {
+      'byweekday': [rrule.FR.nth(1), rrule.FR.nth(3)],
+      'bymonth': [11],
+      'interval': 2, 
+      'freq': rrule.YEARLY
+    }
+  ], 
+  [
+    'go to an event yearly on the fourth thursday in november', 
     {
       'bymonth': [11], 
       'byweekday': [rrule.TH.nth(4)], 
@@ -206,7 +223,7 @@ var fullPhrases = [
     }
   ], 
   [
-    'remember Dad\'s birthday every year on the fourth thursday in november', 
+    'go to an event every year on the fourth thursday in november', 
     {
       'bymonth': [11], 
       'byweekday': [rrule.TH.nth(4)], 
@@ -366,7 +383,7 @@ var fullPhrases = [
   [
     'remind me to take my medicine at 10 and 2pm daily',
     {
-      'byminute': [0, 0], 
+      'byminute': [0], 
       'freq': rrule.DAILY, 
       'byhour': [10, 14], 
       'interval': 1
@@ -375,7 +392,7 @@ var fullPhrases = [
   [
     'remind me to take my medicine at 10 and 2pm every day',
     {
-      'byminute': [0, 0], 
+      'byminute': [0], 
       'freq': rrule.DAILY, 
       'byhour': [10, 14], 
       'interval': 1
@@ -384,9 +401,51 @@ var fullPhrases = [
   [
     'remind me to take my medicine every day at 10 and 2pm',
     {
-      'byminute': [0, 0], 
+      'byminute': [0], 
       'freq': rrule.DAILY, 
       'byhour': [10, 14], 
+      'interval': 1
+    }
+  ],
+  [
+    'remind me at 10 and 2pm every day to take my medicine',
+    {
+      'byminute': [0], 
+      'freq': rrule.DAILY, 
+      'byhour': [10, 14], 
+      'interval': 1
+    }
+  ],
+  [
+    'remind me at 10 and 2:30pm to take my medicine',
+    {
+      'freq': rrule.DAILY,
+      'byhour': [10, 14], 
+      'byminute': [0, 30], 
+      'bysetpos': [1, 4],
+      'count': 2,
+      'interval': 1
+    }
+  ],
+  [
+    'remind me to take meds at 10, 2:30, and 6',
+    {
+      'freq': rrule.DAILY,
+      'byhour': [10, 14, 18], 
+      'byminute': [0, 30],
+      'bysetpos': [1, 4, 5],
+      'count': 3,
+      'interval': 1
+    }
+  ],
+  [
+    'remind me to take meds at 10:30, 2, and 6:15',
+    {
+      'freq': rrule.DAILY,
+      'byhour': [10, 14, 18], 
+      'byminute': [0, 15, 30],
+      'bysetpos': [3, 4, 8],
+      'count': 3,
       'interval': 1
     }
   ],

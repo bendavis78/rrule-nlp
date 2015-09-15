@@ -21,6 +21,13 @@ var extend = function(obj) {
   return obj;
 };
 
+// unique filter
+var unique = function(array) {
+  return array.filter(function(v, i, self) {
+    return self.indexOf(v) === i;
+  });
+};
+
 //=============================================================================
 // Constants
 //=============================================================================
@@ -152,7 +159,6 @@ var TOKEN_TYPES = extend({}, RECUR_TYPES, {
 //=============================================================================
 
 var dateParser = new chrono.Chrono();
-dateParser.parsers = Array.prototype.slice.call(chrono.casual.parsers);
 
 // support standalone month name, eg "next november"
 var monthParser = new chrono.Parser();
@@ -213,6 +219,27 @@ fromNowParser.extract = function(text, ref, match) {
 };
 dateParser.parsers.push(fromNowParser);
 
+// support single digits as hours, given the option 
+var digitAsHourParser = new chrono.Parser();
+digitAsHourParser.pattern = function() {
+  return /(?:[^\w:]|^)(\d+)(?![\d\w:]|\s+(h((ou)?rs?)?|m(in)?))/i;
+};
+digitAsHourParser.extract = function(text, ref, match, opt) {
+  if (!opt.digitAsHour) {
+    return;
+  }
+  return new chrono.ParsedResult({
+    ref: ref,
+    text: match[0],
+    index: match.index,
+    start: {
+      hour: parseInt(match[1])
+    }
+  });
+};
+dateParser.parsers.push(digitAsHourParser);
+
+dateParser.parsers = dateParser.parsers.concat(chrono.casual.parsers);
 
 //=============================================================================
 // Utility Functions
@@ -283,6 +310,9 @@ function normalize(s) {
 }
 
 function anyCertain(parsed) {
+  if (parsed instanceof Date) {
+    return true;
+  }
   var components = Array.prototype.slice.call(arguments, 1);
   for (var i=0; i<components.length; i++) {
     if (parsed.isCertain(components[i])) {
@@ -303,15 +333,22 @@ function allCertain(parsed) {
 */
 
 function formatRFC(property, parsed, refDate) {
-  var dateCertain = anyCertain(parsed, 'day', 'weekday', 'month', 'year');
-  var timeCertain = anyCertain(parsed, 'hour', 'minute', 'second');
-  var date = moment(parsed.date());
-  if (!dateCertain) {
-    var ref = moment(refDate);
-    date.set({year: ref.year(), month: ref.month(), date: ref.date()});
-  }
-  if (!timeCertain) {
-    date.set({ hours: 0, minutes: 0, seconds: 0, milliseconds: 0 });
+  var dateCertain, timeCertain, date = parsed;
+  if (date instanceof Date) {
+    date = moment(date);
+    dateCertain = true;
+    timeCertain = true;
+  } else {
+    dateCertain = anyCertain(parsed, 'day', 'weekday', 'month', 'year');
+    timeCertain = anyCertain(parsed, 'hour', 'minute', 'second');
+    date = moment(parsed.date());
+    if (!dateCertain) {
+      var ref = moment(refDate);
+      date.set({year: ref.year(), month: ref.month(), date: ref.date()});
+    }
+    if (!timeCertain) {
+      date.set({ hours: 0, minutes: 0, seconds: 0, milliseconds: 0 });
+    }
   }
 
   // subject to change if a property needs to be a TIME type
@@ -597,8 +634,8 @@ RRule.prototype.toText = function() {
   }
   if (this.byhour.length) {
     text += ' at ';
-    var hrs = this.byhour.map(function(h) {
-      var m = ('00' + (this.byminute[0] || '')).slice(-2);
+    var hrs = this.byhour.map(function(h, i) {
+      var m = ('00' + (this.byminute[i] || '')).slice(-2);
       return h % 12 + ':' + m + (h < 12 ? 'am' : 'pm');
     }.bind(this));
     text += hrs.join(', ');
@@ -633,14 +670,14 @@ rrule.WEEKENDS = rrule.DAYS_OF_WEEK.slice(5, 7);
 // Event
 //=============================================================================
 
-function Event(refDate) {
+var Event = function(refDate) {
   this.phrase = null;
   this.rrule = null;
   this.refDate = refDate;
   this.dtstart = null;
   this.dtend = null;
   this.parsed = [];
-}
+};
 Event.prototype = {
   toRFCString: function() {
     var value = '';
@@ -673,6 +710,21 @@ Event.prototype = {
     }
     return '';
   },
+  
+  getParsedRange: function() {
+    var start, end, s, e;
+    for (var i=0; i<this.parsed.length; i++) {
+      s = this.parsed[i].index;
+      e = s + this.parsed[i].text.length;
+      if (!start || s < start) {
+        start = s;
+      }
+      if (!end || e > end) {
+        end = e;
+      }
+    }
+    return {start: start, end: end};
+  }
 };
 
 Event.prototype._addResult = function (result, offset) {
@@ -686,7 +738,8 @@ function parse(phrase, opts) {
   opts = opts || {};
   var defaults = {
     preferAMStart: 8,
-    preferFuture: false
+    preferFuture: false,
+    refDate: new Date()
   };
 
   opts = extend(defaults, opts);
@@ -736,14 +789,29 @@ function parse(phrase, opts) {
       }
     }
   } else {
-    // no recurrence, try just date/time
-    var parsed = parseDate(unparsed.text, opts);
-    if (parsed.start) {
-      event.dtstart = parsed.start;
-      if (parsed.end) {
-        event.dtend = parsed.end;
+    // This is a single day, but before we assume it's just a date, we should 
+    // check for multiple times.
+    event.rrule = new RRule({freq: rrule.DAILY});
+    parseRecurringTime(event.phrase, event);
+
+    // if byhour or byminute have no more than 1 item, there's no recurrence.
+    if (event.rrule.byhour.length > 1 || event.rrule.byminute.length > 1) {
+      event.rrule.count = Math.max(
+        event.rrule.byhour.length,
+        event.rrule.byminute.length
+      );
+    } else {
+      event.rrule = null;
+
+      // no recurrence, try just date/time
+      var parsed = parseDate(unparsed.text, opts);
+      if (parsed.start) {
+        event.dtstart = parsed.start;
+        if (parsed.end) {
+          event.dtend = parsed.end;
+        }
+        event._addResult(parsed, unparsed.index);
       }
-      event._addResult(parsed, unparsed.index);
     }
   }
 
@@ -841,22 +909,44 @@ function extractEnding(phrase, event, offset) {
 }
 
 function parseRecurringTime(phrase, event, offset) {
-  var dateResult;
-  var parsedTime = dateParser.parse(phrase, event.opts.refDate);
-  for (var i=0; i<parsedTime.length; i++) {
+  offset = offset || 0;
+  var dateResult, i;
+  var parseOpts = {};
+
+  if (RE_AT_TIME.test(phrase)) {
+    parseOpts.digitAsHour = true;
+  }
+  
+  var parsedTime = dateParser.parse(phrase, event.refDate, parseOpts);
+  var hours = [];
+  var minutes = [];
+
+  for (i=0; i<parsedTime.length; i++) {
     if (!parsedTime[i].start) {
       continue;
     }
-
     dateResult = refineDate(parsedTime[i].start, event.opts);
-    if (dateResult.isCertain('hour')) {
-      event._addResult(parsedTime[i], offset);
-      event.rrule.byhour.push(dateResult.get('hour'));
+    event._addResult(parsedTime[i], offset);
+    hours.push(dateResult.get('hour'));
+    minutes.push(dateResult.get('minute'));
+  }
+
+  event.rrule.byhour = unique(hours).sort();
+  event.rrule.byminute = unique(minutes).sort();
+
+  if (event.rrule.byminute.length > 1) {
+    // Calculate BYSETPOS to select out the correct instances.
+    event.rrule.bysetpos = minutes.map(function(m, i) {
+      var idx = event.rrule.byminute.indexOf(m);
+      return (i * event.rrule.byminute.length) + idx + 1; 
+    });
+
+    // This only works if DTSTART is at the first byhour/byminute
+    if (!event.dtstart) {
+      event.dtstart = new Date(event.refDate.getTime());
     }
-    if (dateResult.isCertain('minute')) {
-      event._addResult(parsedTime[i], offset);
-      event.rrule.byminute.push(dateResult.get('minute'));
-    }
+    event.dtstart.setHours(event.rrule.byhour[0]);
+    event.dtstart.setMinutes(event.rrule.byminute[0]);
   }
 }
 
@@ -899,6 +989,7 @@ function fireOnRecurrenceParsed(rrule) {
   for (var i=0; i<onRecurrenceParsedListeners.length; i++) {
     onRecurrenceParsedListeners[i](rrule);
   }
+  onRecurrenceParsedListeners = [];
 }
 
 function parseRecurrence(phrase, event, offset) {
@@ -954,9 +1045,7 @@ function parseRecurrence(phrase, event, offset) {
       }
 
       // uniqify weekdays
-      weekdays = weekdays.filter(function(value, i, array) {
-        return array.indexOf(value) === i;
-      });
+      weekdays = unique(weekdays);
     }
     
     rr.byweekday = weekdays;

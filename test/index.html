@@ -1,4 +1,4 @@
-<script src="../bower_components/chrono/chrono.min.js"></script>
+<script src="../bower_components/chrono/chrono.js"></script>
 <script src="../bower_components/moment/min/moment.min.js"></script>
 <script src="../bower_components/rrule/lib/rrule.js"></script>
 <script src="../bower_components/rrule/lib/nlp.js"></script>
@@ -24,10 +24,10 @@
       errors.push(e);
     }
     if (errors.length) {
-      console.group('%cFailed: ' + phrase, 'color: red');
+      console.groupCollapsed('%cFailed: ' + phrase, 'color: red');
       for (var e=0; e<errors.length; e++) {
         if (errors[e].key) {
-          console.group(errors[e].key);
+          console.groupCollapsed(errors[e].key);
           console.log('Expected: ', serialize(errors[e].expected));
           console.log('Result: ', serialize(errors[e].result));
           console.log(result);
@@ -43,7 +43,7 @@
       console.groupCollapsed('%cSuccess: ' + phrase, 'color: green');
       console.log('%c' + rfcString, 'color: blue');
       console.log('%c' + verbose, 'color: #333');
-      //console.log('Result: ', result);
+      console.log('Result: ', result);
       console.groupEnd();
     }
   }
@@ -130,11 +130,15 @@
   }
 
   function showRanges(phrase) {
-    var event = rrule.parse(phrase);
+    var event = rrule.parse(phrase, opts);
+    var range = event.getParsedRange();
     var c, i, start, end, found;
 
     print('<p>');
     for (c=0; c<phrase.length; c++) {
+      if (c === range.start) {
+        print('<span class="range">');
+      }
       found = false;
       for (i=0; i<event.parsed.length; i++) {
         start = event.parsed[i].index;
@@ -145,6 +149,9 @@
         }
       }
       print('<span class="' + (found ? 'parsed' : '') + '">' + phrase[c]  + '</span>');
+      if (c === range.end) {
+        print('</span>');
+      }
     }
     print('</p>');
   }
@@ -181,6 +188,9 @@
     cursor: default;
   }
   .parsed {
+    background: #B6D7A8;
+  }
+  .range {
     background: #FCE5CD;
   }
 </style>
