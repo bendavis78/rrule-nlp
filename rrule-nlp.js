@@ -956,20 +956,15 @@ function parseRecurringTime(phrase, event, offset) {
     });
 
     // This only works if DTSTART is before the first byhour/byminute
-    console.groupCollapsed('setting dtstart');
     if (!event.dtstart) {
       event.dtstart = new Date(event.refDate.getTime());
-      console.log('no dtstart, setting to', event.dtstart.toString());
     }
     var dtstart = new Date(event.dtstart.getTime());
     dtstart.setHours(event.rrule.byhour[0]);
     dtstart.setMinutes(event.rrule.byminute[0]);
-    console.log('dtstart should be at least', dtstart.toString());
     if (dtstart < event.dtstart) {
       event.dtstart = dtstart;
-      console.log('updated dtstart to', event.dtstart.toString());
     }
-    console.groupEnd();
   }
 }
 
