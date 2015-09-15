@@ -319,6 +319,7 @@ function anyCertain(parsed) {
       return true;
     }
   }
+  return false;
 }
 
 /*
@@ -343,32 +344,35 @@ function formatRFC(property, parsed, refDate) {
     timeCertain = anyCertain(parsed, 'hour', 'minute', 'second');
     date = moment(parsed.date());
     if (!dateCertain) {
-      var ref = moment(refDate);
-      date.set({year: ref.year(), month: ref.month(), date: ref.date()});
+      date.set({
+        year: refDate.get('year'),
+        month: refDate.get('month') - 1,
+        date: refDate.get('day')
+      });
     }
     if (!timeCertain) {
-      date.set({ hours: 0, minutes: 0, seconds: 0, milliseconds: 0 });
+      date.set({hours: 0, minutes: 0, seconds: 0, milliseconds: 0});
     }
   }
 
   // subject to change if a property needs to be a TIME type
-  var validTypes, types = ['DATE-TIME', 'DATE'];
+  var typePref, validTypes = ['DATE-TIME', 'DATE'];
   if (property && property.toUpperCase() === 'COMPLETED') {
-    types = ['DATE-TIME'];
+    validTypes = ['DATE-TIME'];
   }
 
   if (dateCertain && timeCertain) {
-    validTypes = ['DATE-TIME', 'DATE', 'TIME'];
+    typePref = ['DATE-TIME', 'DATE', 'TIME'];
   } else if (dateCertain) {
-    validTypes = ['DATE', 'DATE-TIME', 'TIME'];
+    typePref = ['DATE', 'DATE-TIME', 'TIME'];
   } else if (timeCertain) {
-    validTypes = ['TIME', 'DATE-TIME', 'DATE'];
+    typePref = ['TIME', 'DATE-TIME', 'DATE'];
   }
 
   var type = '';
-  for (var t=0; t<validTypes.length; t++) {
-    if (types.indexOf(validTypes[t]) !== -1) {
-      type = validTypes[t];
+  for (var t=0; t<typePref.length; t++) {
+    if (validTypes.indexOf(typePref[t]) !== -1) {
+      type = typePref[t];
       break;
     }
   }
@@ -679,9 +683,26 @@ var Event = function(refDate) {
   this.phrase = null;
   this.rrule = null;
   this._dtstart = null;
-  this.refDate = refDate;
   this.dtend = null;
   this.parsed = [];
+  this.flags = [];
+
+  // set refDate to a new parsedComponents
+  this.refDate = new chrono.ParsedComponents();
+  if (refDate instanceof Date) {
+    this.refDate.assign('day', refDate.getDate());
+    this.refDate.assign('month', refDate.getMonth() + 1);
+    this.refDate.assign('year', refDate.getFullYear());
+    this.refDate.assign('hour', refDate.getHours());
+    this.refDate.assign('minute', refDate.getMinutes());
+  } else if (refDate instanceof chrono.ParsedComponents) {
+    this.refDate = refDate;
+  } else {
+    var parsed = chrono.parse(refDate);
+    if (parsed.length) {
+      this.refDate = parsed[0].start;
+    }
+  }
 };
 Event.prototype = {
   get dtstart() {
@@ -690,7 +711,7 @@ Event.prototype = {
   set dtstart(value) {
     this._dtstart = value;
     if (this.rrule) {
-      this.rrule.options.dtstart = value;
+      this.rrule.options.dtstart = value.date();
     }
   },
   toRFCString: function() {
@@ -805,6 +826,7 @@ function parse(phrase, opts) {
   } else {
     // This is a single day, but before we assume it's just a date, we should 
     // check for multiple times.
+    event.flags.isOneDay = true;
     event.rrule = new RRule({freq: rrule.DAILY});
     parseRecurringTime(event.phrase, event);
 
@@ -924,23 +946,27 @@ function extractEnding(phrase, event, offset) {
 
 function parseRecurringTime(phrase, event, offset) {
   offset = offset || 0;
-  var dateResult, i;
+  var dateResult, dateResults, i;
   var parseOpts = {};
 
   if (RE_AT_TIME.test(phrase)) {
     parseOpts.digitAsHour = true;
   }
-  
-  var parsedTime = dateParser.parse(phrase, event.refDate, parseOpts);
+
+  var parsedTime = dateParser.parse(phrase, event.refDate.date(), parseOpts);
   var hours = [];
   var minutes = [];
 
+  dateResults = [];
   for (i=0; i<parsedTime.length; i++) {
     if (!parsedTime[i].start) {
       continue;
     }
     dateResult = refineDate(parsedTime[i].start, event.opts);
     event._addResult(parsedTime[i], offset);
+    if (anyCertain(dateResult, 'year', 'month', 'day', 'weekday')) {
+      dateResults.push(dateResult);
+    }
     hours.push(dateResult.get('hour'));
     minutes.push(dateResult.get('minute'));
   }
@@ -956,13 +982,22 @@ function parseRecurringTime(phrase, event, offset) {
     });
 
     // This only works if DTSTART is before the first byhour/byminute
-    if (!event.dtstart) {
-      event.dtstart = new Date(event.refDate.getTime());
+    var dtstart = event.dtstart;
+    if (!dtstart) {
+      if (dateResults.length) {
+        // the first instance had a date (eg, this sunday at ...)
+        dtstart = dateResults[0];
+      } else {
+        // imply datestart from event.refDate
+        dtstart = new chrono.ParsedComponents();
+        ['day', 'month', 'year', 'hour', 'minute'].forEach(function(k) {
+          dtstart.imply(k, event.refDate.get(k));
+        });
+      }
     }
-    var dtstart = new Date(event.dtstart.getTime());
-    dtstart.setHours(event.rrule.byhour[0]);
-    dtstart.setMinutes(event.rrule.byminute[0]);
-    if (dtstart < event.dtstart) {
+    dtstart.assign('hour', event.rrule.byhour[0]);
+    dtstart.assign('minute', minutes[0]);
+    if (!event.dtstart || dtstart.date() < event.dtstart.date()) {
       event.dtstart = dtstart;
     }
   }

@@ -442,6 +442,19 @@ var fullPhrases = [
     'remind me to take meds at 10:30, 2, and 6:15',
     {
       'freq': rrule.DAILY,
+      'dtstart': '20150101T103000',
+      'byhour': [10, 14, 18], 
+      'byminute': [0, 15, 30],
+      'bysetpos': [3, 4, 8],
+      'count': 3,
+      'interval': 1,
+    }
+  ],
+  [
+    'remind me to do something this sunday at 10:30, 2, and 6:15',
+    {
+      'dtstart': '20150104T103000',
+      'freq': rrule.DAILY,
       'byhour': [10, 14, 18], 
       'byminute': [0, 15, 30],
       'bysetpos': [3, 4, 8],
