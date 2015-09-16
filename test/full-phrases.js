@@ -417,6 +417,25 @@ var fullPhrases = [
     }
   ],
   [
+    'take meds at 10:30 and 2:30pm daily',
+    {
+      'freq': rrule.DAILY,
+      'byhour': [10, 14], 
+      'byminute': [30], 
+      'interval': 1
+    }
+  ],
+  [
+    'take meds daily at 10 and 2:30',
+    {
+      'freq': rrule.DAILY,
+      'byhour': [10, 14], 
+      'byminute': [0, 30], 
+      'bysetpos': [1, 4],
+      'interval': 1
+    }
+  ],
+  [
     'remind me at 10 and 2:30pm to take my medicine',
     {
       'freq': rrule.DAILY,
@@ -442,7 +461,7 @@ var fullPhrases = [
     'remind me to take meds at 10:30, 2, and 6:15',
     {
       'freq': rrule.DAILY,
-      'dtstart': '20150101T103000',
+      'dtstart': '20150101T100000',
       'byhour': [10, 14, 18], 
       'byminute': [0, 15, 30],
       'bysetpos': [3, 4, 8],
@@ -451,9 +470,20 @@ var fullPhrases = [
     }
   ],
   [
+    'do something at 10 and 2 on sunday',
+    {
+      'dtstart': '20150104T100000',
+      'freq': rrule.DAILY,
+      'byhour': [10, 14], 
+      'byminute': [0],
+      'count': 2,
+      'interval': 1
+    }
+  ],
+  [
     'remind me to do something this sunday at 10:30, 2, and 6:15',
     {
-      'dtstart': '20150104T103000',
+      'dtstart': '20150104T100000',
       'freq': rrule.DAILY,
       'byhour': [10, 14, 18], 
       'byminute': [0, 15, 30],

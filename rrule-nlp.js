@@ -367,6 +367,8 @@ function formatRFC(property, parsed, refDate) {
     typePref = ['DATE', 'DATE-TIME', 'TIME'];
   } else if (timeCertain) {
     typePref = ['TIME', 'DATE-TIME', 'DATE'];
+  } else {
+    typePref = ['DATE', 'DATE-TIME', 'TIME'];
   }
 
   var type = '';
@@ -643,13 +645,36 @@ RRule.prototype.toText = function() {
   }
   if (this.byhour.length) {
     text += ' at ';
-    var hrs = this.byhour.map(function(h, i) {
-      var m = ('00' + (this.byminute[i] || '')).slice(-2);
-      return h % 12 + ':' + m + (h < 12 ? 'am' : 'pm');
-    }.bind(this));
+    var hrs = [];
+    var i = 0;
+    for (var h=0; h<this.byhour.length; h++) {
+      var hr = this.byhour[h];
+      for (var m=0; m<this.byminute.length; m++) {
+        if (!this.bysetpos.length || this.bysetpos.indexOf(i+1) !== -1) {
+          var min = ('00' + (this.byminute[m] || '')).slice(-2);
+          hrs.push(hr % 12 + ':' + min + (hr < 12 ? 'am' : 'pm'));
+        }
+        i += 1;
+      }
+    }
     text += hrs.join(', ');
   }
   return text;
+};
+RRule.prototype.all = function() {
+  // FIXME: for some reason, calling all() on this causes an incorrect
+  // iteration. This occurred with the phrase "Take meds at 10 and 2".
+  var opts = JSON.parse(JSON.stringify(this.options));
+  var v;
+  for (var k in opts) {
+    v = opts[k];
+    if (v === null || v === undefined || (v instanceof Array && !v.length)) {
+      delete opts[k];
+    }
+  }
+  opts.dtstart = this.options.dtstart;
+  var rr = new BaseRRule(opts);
+  return rr.all.apply(rr, arguments);
 };
 RRule.prototype.constructor = RRule;
 
@@ -685,7 +710,7 @@ var Event = function(refDate) {
   this._dtstart = null;
   this.dtend = null;
   this.parsed = [];
-  this.flags = [];
+  this.flags = {};
 
   // set refDate to a new parsedComponents
   this.refDate = new chrono.ParsedComponents();
@@ -711,18 +736,19 @@ Event.prototype = {
   set dtstart(value) {
     this._dtstart = value;
     if (this.rrule) {
-      this.rrule.options.dtstart = value.date();
+      this.rrule.options.dtstart = value ? value.date() : null;
     }
   },
   toRFCString: function() {
     var value = '';
     if (this.dtstart) {
-      value += 'DTSTART:' + formatRFC('dtstart', this.dtstart, this.refDate) + '\n';
+      value += 'DTSTART:' + this.componentToRFCString('dtstart') + '\n';
       if (this.dtend) {
-        value += 'DTEND:' + formatRFC('dtstart', this.dtend, this.refDate) + '\n';
+        value += 'DTEND:' + this.componentToRFCString('dtend') + '\n';
       }
     }
     if (this.rrule) {
+      // strip dtstart from RRULE since it's not supposed to go there.
       var rfcRRule = this.rrule.toString();
       value += rfcRRule.replace(/(;DTSTART=[^;]*)|(DTSTART=[^;]*;?)/, '');
     }
@@ -826,27 +852,30 @@ function parse(phrase, opts) {
   } else {
     // This is a single day, but before we assume it's just a date, we should 
     // check for multiple times.
-    event.flags.isOneDay = true;
     event.rrule = new RRule({freq: rrule.DAILY});
     parseRecurringTime(event.phrase, event);
 
-    // if byhour or byminute have no more than 1 item, there's no recurrence.
     if (event.rrule.byhour.length > 1 || event.rrule.byminute.length > 1) {
+      event.flags.isOneDay = true;
       event.rrule.count = Math.max(
         event.rrule.byhour.length,
         event.rrule.byminute.length
       );
     } else {
+      // if byhour or byminute have no more than 1 item, there's no recurrence.
       event.rrule = null;
 
       // no recurrence, try just date/time
-      var parsed = parseDate(unparsed.text, opts);
-      if (parsed.start) {
-        event.dtstart = parsed.start;
-        if (parsed.end) {
-          event.dtend = parsed.end;
+      if (!event.dtstart) {
+        var parsed = parseDate(unparsed.text, opts);
+        if (parsed.start) {
+          event.flags.isOneDay = true;
+          event.dtstart = parsed.start;
+          if (parsed.end) {
+            event.dtend = parsed.end;
+          }
+          event._addResult(parsed, unparsed.index);
         }
-        event._addResult(parsed, unparsed.index);
       }
     }
   }
@@ -967,12 +996,29 @@ function parseRecurringTime(phrase, event, offset) {
     if (anyCertain(dateResult, 'year', 'month', 'day', 'weekday')) {
       dateResults.push(dateResult);
     }
-    hours.push(dateResult.get('hour'));
-    minutes.push(dateResult.get('minute'));
+    if (dateResult.isCertain('hour')) {
+      hours.push(dateResult.get('hour'));
+      minutes.push(dateResult.get('minute'));
+    }
   }
 
   event.rrule.byhour = unique(hours).sort();
   event.rrule.byminute = unique(minutes).sort();
+
+  // figure out a "best guess" for a date if given in this phrase
+  var dtstart = event.dtstart;
+  if (!dtstart) {
+    if (dateResults.length) {
+      // the first instance had a date (eg, this sunday at ...)
+      dtstart = dateResults[0];
+    } else {
+      // imply datestart from event.refDate
+      dtstart = new chrono.ParsedComponents();
+      ['day', 'month', 'year', 'hour', 'minute'].forEach(function(k) {
+        dtstart.imply(k, event.refDate.get(k));
+      });
+    }
+  }
 
   if (event.rrule.byminute.length > 1) {
     // Calculate BYSETPOS to select out the correct instances.
@@ -980,23 +1026,12 @@ function parseRecurringTime(phrase, event, offset) {
       var idx = event.rrule.byminute.indexOf(m);
       return (i * event.rrule.byminute.length) + idx + 1; 
     });
+  }
 
-    // This only works if DTSTART is before the first byhour/byminute
-    var dtstart = event.dtstart;
-    if (!dtstart) {
-      if (dateResults.length) {
-        // the first instance had a date (eg, this sunday at ...)
-        dtstart = dateResults[0];
-      } else {
-        // imply datestart from event.refDate
-        dtstart = new chrono.ParsedComponents();
-        ['day', 'month', 'year', 'hour', 'minute'].forEach(function(k) {
-          dtstart.imply(k, event.refDate.get(k));
-        });
-      }
-    }
+  // DTSTART must be before the first byhour/byminute
+  if (event.rrule.byhour.length) {
     dtstart.assign('hour', event.rrule.byhour[0]);
-    dtstart.assign('minute', minutes[0]);
+    dtstart.assign('minute', event.rrule.byminute[0]);
     if (!event.dtstart || dtstart.date() < event.dtstart.date()) {
       event.dtstart = dtstart;
     }
