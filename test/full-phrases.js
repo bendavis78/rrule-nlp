@@ -232,6 +232,28 @@ var fullPhrases = [
     }
   ], 
   [
+    'update the thing every 3 months on the 15th starting in March',
+    {
+      'freq': rrule.MONTHLY,
+      'interval': 3,
+      'bymonthday': [15],
+      'dtstart': '20150301'
+    }
+  ],
+  [
+    'taxes are due on April 15th',
+    {'dtstart': '20150414'}
+  ],
+  [
+    'pay estimated taxes on the 15th every April, June, September, and January',
+    {
+      'freq': rrule.YEARLY,
+      'interval': 1,
+      'bymonth': [1,4,6,9],
+      'bymonthday': [15]
+    }
+    ],
+  [
     'christmas is once a year on december 25th', 
     {
       'bymonth': [12], 
@@ -470,6 +492,18 @@ var fullPhrases = [
     }
   ],
   [
+    'take meds this sunday at 10 and 2:30',
+    {
+      'dtstart': '20150104T100000',
+      'freq': rrule.DAILY,
+      'byhour': [10, 14], 
+      'byminute': [0, 30],
+      'bysetpos': [1, 4],
+      'count': 2,
+      'interval': 1
+    }
+  ],
+  [
     'do something at 10 and 2 on sunday',
     {
       'dtstart': '20150104T100000',
@@ -477,6 +511,17 @@ var fullPhrases = [
       'byhour': [10, 14], 
       'byminute': [0],
       'count': 2,
+      'interval': 1
+    }
+  ],
+  [
+    'do something every wednesday at 10 and 2:30',
+    {
+      'freq': rrule.WEEKLY,
+      'byhour': [10, 14], 
+      'byminute': [0, 30],
+      'bysetpos': [1, 4],
+      'byweekday': [rrule.WE],
       'interval': 1
     }
   ],

@@ -101,6 +101,8 @@ var RE_RECURRING_UNIT = new RegExp('(bi)?(weekly|monthly|yearly)');
 
 // TODO support biweekly, bimonthly, semianually, etc...
 
+var RE_TIME = new RegExp('(\\d+:\\d+)');
+var RE_AT = new RegExp('at\\s(:?.+)');
 var RE_AT_TIME = new RegExp('at\\s(.+)'); 
 var RE_STARTING = new RegExp('start(?:s|ing)?');
 var RE_ENDING = new RegExp('(?:\\bend|until)(?:s|ing)?');
@@ -138,6 +140,7 @@ var RECUR_TYPES = {
   unit: RE_UNITS,
   recurringUnit: RE_RECURRING_UNIT,
   ordinal: RE_ORDINAL,
+  time: RE_TIME,
   number: RE_NUMBER,
   pluralWeekday: RE_PLURAL_WKDAY,
   weekday: RE_WKDAY_TYPE,
@@ -145,6 +148,7 @@ var RECUR_TYPES = {
 };
 
 var TOKEN_TYPES = extend({}, RECUR_TYPES, {
+  at: RE_AT,
   ambigmod: RE_AMBIGMOD,
   starting: RE_STARTING,
   ending: RE_ENDING,
@@ -219,7 +223,7 @@ fromNowParser.extract = function(text, ref, match) {
 };
 dateParser.parsers.push(fromNowParser);
 
-// support single digits as hours, given the option 
+// support lone digits as hours, given the option 
 var digitAsHourParser = new chrono.Parser();
 digitAsHourParser.pattern = function() {
   return /(?:[^\w:]|^)(\d+)(?![\d\w:]|\s+(h((ou)?rs?)?|m(in)?))/i;
@@ -240,6 +244,10 @@ digitAsHourParser.extract = function(text, ref, match, opt) {
 dateParser.parsers.push(digitAsHourParser);
 
 dateParser.parsers = dateParser.parsers.concat(chrono.casual.parsers);
+// remove the ENMergeDateTimeRefiner
+dateParser.refiners = dateParser.refiners.filter(function(refiner) {
+  return refiner.constructor.name !== 'ENMergeDateTimeRefiner';
+});
 
 //=============================================================================
 // Utility Functions
@@ -914,7 +922,6 @@ function parseStartAndEnd(phrase, event) {
     // * when freq > from/to: from/to acts as recurring duration
     // * otherwise: from/to acts as the rrule bounds (rr.until)
     onRecurrenceParsed(function(rr) {
-      // TODO:RANGE
       var from = parseDate(match[3], event.opts);
       var fromIdx = groupIndex(match, 3);
       var to = parseDate(match[5], event.opts);
@@ -1082,7 +1089,6 @@ function fireOnRecurrenceParsed(rrule) {
 
 function parseRecurrence(phrase, event, offset) {
   var tokens = tokenize(phrase).withType(Object.keys(RECUR_TYPES));
-
   if (!tokens.length) {
     return null;
   }
@@ -1154,11 +1160,13 @@ function parseRecurrence(phrase, event, offset) {
     event._addResult(recurring, offset);
     tokens = tokens.withoutType('every', 'everyOther', 'recurringUnit');
 
+    var unitSpecified = false;
+
     while ((token = tokens.next())) {
       if (token.type === 'number') {
         // we assume a bare number when "every" is present always specifies the interval
         n = getNumber(token.text);
-        if (!isNaN(n)) {
+        if (!isNaN(n) && !unitSpecified) {
           rr.interval = n;
           event._addResult(token, offset);
         }
@@ -1166,6 +1174,7 @@ function parseRecurrence(phrase, event, offset) {
         // we assume a bare unit (grow up...) always specifies the frequency
         rr.freq = getUnitFreq(token.text);
         event._addResult(token, offset);
+        unitSpecified = true;
       } else if (token.type === 'ordinal') {
         var ords = [token];
 
@@ -1175,6 +1184,10 @@ function parseRecurrence(phrase, event, offset) {
         }
 
         if (!token) {
+          for (n=0; n<ords.length; n++) {
+            rr.bymonthday.push(getOrdinalIndex(ords[n].text));
+            event._addResult(ords[n], offset);
+          }
           break;
         }
 
@@ -1203,6 +1216,7 @@ function parseRecurrence(phrase, event, offset) {
             }
           }
         }
+        unitSpecified = true;
       } else if (!rr.byweeday && token.type === 'weekday') {
         // if we have a day of week, we can assume the frequency is
         // weekly if it hasnt been set yet.
@@ -1215,6 +1229,7 @@ function parseRecurrence(phrase, event, offset) {
         }
         rr.byweekday = rr.byweekday.concat(daysOfWeek);
         event._addResult(token, offset);
+        unitSpecified = true;
       } else if (token.type === 'month') {
         // if we have a month we assume frequency is yearly if it hasnt
         // been set.
@@ -1233,6 +1248,7 @@ function parseRecurrence(phrase, event, offset) {
           rr.bymonthday.push(oidx);
           event._addResult(token, offset);
         }
+        unitSpecified = true;
       }
     }
 
@@ -1243,6 +1259,7 @@ function parseRecurrence(phrase, event, offset) {
 }
 
 rrule.parse = parse;
+rrule.RRule = RRule;
 rrule.Event = Event;
 
 return rrule;
