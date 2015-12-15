@@ -649,6 +649,7 @@ RRule.prototype.toText = function() {
   var text = BaseRRule.prototype.toText.call(this);
   this.options = orig;
   if (text.match(/RRule error:/)) {
+    console.warn(text, this.options);
     return null;
   }
   if (this.byhour.length) {
